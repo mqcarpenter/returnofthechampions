@@ -1,0 +1,309 @@
+/* ============================================================
+   assets/live-wire.css — scores/live-scoring.php + the /mobile module.
+
+   Loaded on its own rather than appended to mfl26.css: this is the one
+   dark surface on the site, and keeping a self-contained dark palette
+   out of the global sheet stops it bleeding into every other page.
+
+   The lean bar IS the matchup (see includes/live-wire.php): the fill
+   grows from center toward whichever side leads, sized by the margin;
+   the thin tick is the projected-final lean. Amber is reserved
+   exclusively for that fill and for big plays.
+   ============================================================ */
+.lw-page{
+  --lw-bg:#15100D; --lw-surface:#221813; --lw-surface-2:#2C201A; --lw-line:#3A2A22;
+  --lw-text:#F6F1EA; --lw-muted:#A08D7E;
+  --lw-accent:#E0531B; --lw-big:#F2A93B;
+  --lw-mono:"Roboto Mono",ui-monospace,Menlo,monospace;
+  --lw-disp:"Roboto Condensed",Arial,sans-serif;
+  background:var(--lw-bg); color:var(--lw-text);
+  padding:16px 14px 48px;
+}
+.lw-page *{box-sizing:border-box;}
+
+.lw-mast{display:flex; align-items:center; gap:11px; flex-wrap:wrap; margin-bottom:14px;}
+.lw-brand{font-family:var(--lw-disp); font-size:30px; font-weight:700; margin:0; line-height:1;
+  text-transform:uppercase; letter-spacing:.01em; color:var(--lw-text);}
+.lw-brand span{color:var(--lw-accent);}
+.lw-pill{display:inline-flex; align-items:center; gap:6px;
+  background:rgba(224,83,27,.14); border:1px solid rgba(224,83,27,.45);
+  color:var(--lw-accent); border-radius:999px; padding:3px 11px;
+  font-family:var(--lw-disp); font-size:12.5px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.1em;}
+.lw-dot{width:6px; height:6px; border-radius:50%; background:var(--lw-accent);
+  animation:lw-pulse 1.7s ease-in-out infinite;}
+@keyframes lw-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.3;transform:scale(.7);}}
+.lw-updated{margin-left:auto; font-family:var(--lw-mono); font-size:11px; color:var(--lw-muted);}
+
+.lw-empty{background:var(--lw-surface); border:1px solid var(--lw-line);
+  border-radius:14px; padding:26px 20px; color:var(--lw-muted);}
+.lw-empty h2{font-family:var(--lw-disp); color:var(--lw-text); margin:0 0 6px; font-size:20px;}
+.lw-empty p{margin:0; font-size:14px; line-height:1.55;}
+
+/* ---- big play wire ---------------------------------------------- */
+.lw-wire{background:var(--lw-surface); border:1px solid var(--lw-line);
+  border-radius:14px; margin-bottom:14px; overflow:hidden;}
+.lw-wire-head{display:flex; align-items:center; gap:9px; padding:8px 14px;
+  border-bottom:1px solid var(--lw-line);}
+.lw-wire-title{font-family:var(--lw-disp); font-size:15px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.1em; color:var(--lw-big);}
+.lw-wire-sub{margin-left:auto; font-size:11.5px; color:var(--lw-muted);}
+.lw-wire-body{display:flex; gap:9px; padding:10px 14px; overflow-x:auto;}
+.lw-play{display:flex; align-items:center; gap:8px; flex:none;
+  background:var(--lw-surface-2); border:1px solid var(--lw-line);
+  border-left:3px solid var(--lw-big); border-radius:10px; padding:6px 11px 6px 8px;}
+.lw-play img,.lw-play .lw-av{width:34px; height:25px; border-radius:5px;
+  object-fit:cover; object-position:top center; flex:none;}
+.lw-play-txt{line-height:1.25; white-space:nowrap;}
+.lw-play-n{display:block; font-weight:700; font-size:13px;}
+.lw-play-m{display:block; font-size:10.5px; color:var(--lw-muted);}
+.lw-play-p{font-family:var(--lw-mono); font-weight:700; font-size:16px; color:var(--lw-big);}
+
+/* ---- matchup card ------------------------------------------------ */
+.lw-game{background:var(--lw-surface); border:1px solid var(--lw-line);
+  border-radius:14px; margin-bottom:10px; overflow:hidden; transition:border-color .3s;}
+.lw-game.redzone{border-color:rgba(224,83,27,.5);}
+/* One DOM, two layouts: a broadcast bug on desktop, stacked rows on a
+   phone. Any other approach loses the franchise names at 375px. */
+.lw-row{display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  gap:10px; padding:9px 14px 7px; grid-template-areas:"a state b";}
+.lw-tm{display:flex; align-items:center; gap:9px; min-width:0;}
+.lw-tm.away{grid-area:a; justify-content:flex-end; text-align:right;}
+.lw-tm:not(.away){grid-area:b;}
+.lw-name{font-family:var(--lw-disp); font-size:18px; font-weight:700;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.lw-score{font-family:var(--lw-mono); font-size:22px; font-weight:700; flex:none;
+  font-variant-numeric:tabular-nums;}
+.lw-tm.trail .lw-name,.lw-tm.trail .lw-score{color:var(--lw-muted);}
+.lw-score.bump{animation:lw-bump .55s ease;}
+@keyframes lw-bump{0%{transform:scale(1);}35%{transform:scale(1.14); color:var(--lw-big);}100%{transform:scale(1);}}
+.lw-state{grid-area:state; text-align:center; min-width:92px;}
+.lw-q{display:block; font-family:var(--lw-mono); font-size:12.5px; font-weight:700; color:var(--lw-accent);}
+.lw-dd{display:block; font-family:var(--lw-mono); font-size:10px; color:var(--lw-muted);}
+
+/* Helmets are transparent PNGs (see includes/helmets.php) so they sit
+   straight on the card -- no plate, no backing box. Left and right load
+   genuinely different art so the teams face each other; only the four
+   single-direction helmets get mirrored. */
+.lw-helm{flex:none; width:46px; height:36px; display:flex; align-items:center; justify-content:center;}
+.lw-helm img{max-width:100%; max-height:100%; object-fit:contain;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.55));}
+.lw-helm img.flip{transform:scaleX(-1);}
+.lw-tm.trail .lw-helm img{filter:grayscale(.6) brightness(.72);}
+
+/* ---- the lean bar --------------------------------------------------
+   A margin meter, not a football field: a slim track with a center tie
+   mark, and a fill that grows from center toward whichever side leads.
+   Position alone says who's ahead; distance from center says by how
+   much. No yard lines or end zones to decode. */
+.lw-field{position:relative; height:6px; margin:16px 14px 6px; border-radius:999px;
+  background:var(--lw-surface-2);}
+.lw-mid{position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; margin-left:-1px;
+  background:var(--lw-line); border-radius:1px;}
+.lw-lean{position:absolute; top:0; bottom:0; border-radius:999px; background:var(--lw-big);
+  transition:left .7s cubic-bezier(.3,.8,.4,1), width .7s cubic-bezier(.3,.8,.4,1);}
+.lw-game.redzone .lw-lean{box-shadow:0 0 10px rgba(242,169,59,.85);}
+.lw-proj{position:absolute; top:-5px; bottom:-5px; width:2px; margin-left:-1px;
+  background:#F5E96B; opacity:.85; border-radius:1px;
+  transition:left .7s cubic-bezier(.3,.8,.4,1);}
+
+/* ---- the legend ----------------------------------------------------
+   One-time explainer for the lean bar, sitting once below the board
+   rather than repeated on every card. Swatches reuse the real classes
+   so they can never drift out of sync with what they explain. */
+.lw-legend{display:flex; flex-wrap:wrap; gap:8px 24px; padding:16px 6px 4px;
+  font-size:11.5px; color:var(--lw-muted); line-height:1.4;}
+.lw-legend-item{display:flex; align-items:center; gap:9px;}
+.lw-legend-swatch{position:relative; width:44px; height:6px; flex:none;
+  border-radius:999px; background:var(--lw-surface-2);}
+
+/* ---- roster dropdown (collapsible) ----------------------------------
+   Collapsed by default; tapping reveals every starter on both sides,
+   not just whoever happens to be live -- the card has something to
+   show even with no games in progress. Named apart from .lw-rosters
+   below, the unrelated two-column grid on the box-score drill-down. */
+.lw-roster-drop{border-top:1px solid var(--lw-line);}
+.lw-roster-drop-sum{display:flex; align-items:center; justify-content:space-between;
+  gap:8px; padding:10px 14px; cursor:pointer; list-style:none;
+  font-family:var(--lw-disp); font-size:11px; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--lw-muted);}
+.lw-roster-drop-sum::-webkit-details-marker{display:none;}
+.lw-roster-drop-sum::marker{content:'';}
+.lw-roster-drop-sum:hover{color:var(--lw-text);}
+.lw-chev{width:7px; height:7px; flex:none; border-right:2px solid currentColor;
+  border-bottom:2px solid currentColor; transform:rotate(45deg); transition:transform .2s;}
+.lw-roster-drop[open] .lw-chev{transform:rotate(-135deg);}
+
+.lw-onfield{display:grid; grid-template-columns:1fr 1fr; gap:0 12px; padding:0 14px 12px;}
+.lw-of-col{display:flex; flex-direction:column; min-width:0;}
+.lw-of-lbl{font-family:var(--lw-disp); font-size:9.5px; text-transform:uppercase;
+  letter-spacing:.1em; color:var(--lw-muted); padding-bottom:4px;}
+.lw-of-col.a .lw-of-lbl{color:var(--lw-accent);}
+.lw-pl{display:flex; align-items:center; gap:7px; padding:3px 0;}
+/* A soft break between position GROUPS (QB/RB/WR/... per
+   ROTC_LW_POSITION_ORDER), not a line under every single player --
+   that would just be visual noise once a column is a dozen rows deep. */
+.lw-pl.lw-pos-start{margin-top:7px; padding-top:8px; border-top:1px solid var(--lw-line);}
+.lw-pl.yet{opacity:.5;}
+.lw-pl img,.lw-pl .lw-av{width:22px; height:22px; border-radius:50%;
+  object-fit:cover; object-position:top center; flex:none;}
+.lw-av{display:flex; align-items:center; justify-content:center; background:#3A2A22;
+  color:var(--lw-muted); font-family:var(--lw-disp); font-size:9px; font-weight:700;}
+.lw-pl-n{flex:1; min-width:0; font-size:11.5px; display:flex; flex-direction:column;
+  gap:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.lw-pl-pos{font-size:9px; color:var(--lw-muted); text-transform:uppercase; letter-spacing:.03em;}
+.lw-pl-s{flex:none; font-family:var(--lw-mono); font-size:12px; font-weight:700;
+  color:var(--lw-muted); font-variant-numeric:tabular-nums;}
+.lw-pl.live .lw-pl-s{color:var(--lw-big);}
+.lw-pl.done .lw-pl-s{color:var(--lw-text);}
+.lw-none{font-size:11.5px; color:var(--lw-muted); font-style:italic;}
+
+@media (max-width:680px){
+  .lw-page{padding:12px 9px 36px;}
+  .lw-brand{font-size:23px;}
+  /* Stack the teams; state sits to the right across both rows. */
+  .lw-row{grid-template-columns:1fr auto; grid-template-areas:"a state" "b state";
+    gap:2px 10px; padding:8px 12px 6px;}
+  .lw-tm.away,.lw-tm:not(.away){justify-content:space-between; text-align:left;}
+  /* Home row is score-then-name in the DOM; reverse so both rows read
+     name-then-score once stacked. */
+  .lw-tm:not(.away){flex-direction:row-reverse;}
+  .lw-name{font-size:16px; flex:1; min-width:0;}
+  .lw-score{font-size:19px;}
+  .lw-state{min-width:0; text-align:right; align-self:center;}
+  /* Helmets off: two 46px slots cost more width than the names can spare,
+     and the name is what identifies a matchup on a phone. */
+  .lw-helm{display:none;}
+  .lw-field{height:8px; margin:10px 12px 4px;}
+  /* Two columns still, one per team. No cap here -- the roster panel is
+     already collapsed by default (see .lw-rosters), so a phone only pays
+     for the full list's height when someone actually opens it. */
+  .lw-onfield{gap:0 10px; padding:0 12px 10px;}
+  .lw-pl img,.lw-pl .lw-av{width:19px; height:19px;}
+  .lw-pl-n{font-size:11px;}
+}
+@media (max-width:360px){
+  .lw-name{font-size:15px;} .lw-score{font-size:17px;} .lw-dd{display:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  .lw-page *{animation:none !important; transition:none !important;}
+}
+
+/* ---- embedded in the /mobile hub -----------------------------------
+   The dashboard supplies its own page chrome and bottom tab bar, so the
+   panel drops the standalone page's outer padding and leaves room for
+   the fixed tab bar. Colours stay: this panel is the one dark surface
+   in the hub, exactly as the full-site page is on the main site. */
+.lw-embed{padding:0 0 78px; background:transparent;}
+.lw-embed .lw-game{background:var(--lw-surface);}
+.lw-embed .lw-wire{margin-bottom:12px;}
+
+/* The viewer's own matchup, pinned to the top of the list. */
+.lw-game.mine{border-color:rgba(224,83,27,.55);}
+.lw-mine-tag{font-family:var(--lw-disp); font-size:9.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--lw-accent); padding:7px 14px 0;}
+/* ---- demo preview (?demo=1) ---------------------------------------
+   Marked unmistakably: the numbers are real but the week is over, and
+   nobody should mistake a preview for a live scoreboard. */
+.lw-pill.demo{background:rgba(242,169,59,.16); border-color:rgba(242,169,59,.5); color:var(--lw-big);}
+.lw-demo-bar{background:rgba(242,169,59,.12); border:1px solid rgba(242,169,59,.4);
+  color:var(--lw-text); border-radius:12px; padding:9px 14px; margin-bottom:12px; font-size:13px;}
+.lw-demo-bar strong{color:var(--lw-big);}
+.lw-demo-bar a{color:var(--lw-accent); margin-left:6px; white-space:nowrap;}
+.lw-demo-btn{display:inline-block; margin-top:12px; background:var(--lw-accent); color:#1a0f08;
+  font-family:var(--lw-disp); font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  font-size:13px; padding:9px 16px; border-radius:9px; text-decoration:none;}
+.lw-demo-btn:hover{filter:brightness(1.08); color:#1a0f08;}
+.lw-demo-btn:focus-visible{outline:2px solid var(--lw-big); outline-offset:2px;}
+.lw-demo-note{font-size:11.5px; margin:7px 0 0; color:var(--lw-muted);}
+
+/* ---- the play behind a jump (ESPN) ---------------------------------
+   Only present when ESPN could name it; the feed reads fine without. */
+.lw-play{align-items:flex-start;}
+.lw-play.has-detail{max-width:420px;}
+.lw-play-d{display:block; margin-top:3px; font-size:11px; line-height:1.4;
+  color:var(--lw-text); white-space:normal;}
+.lw-play-when{display:inline-block; font-family:var(--lw-mono); font-size:9.5px;
+  color:var(--lw-big); border:1px solid rgba(242,169,59,.4); border-radius:4px;
+  padding:0 4px; margin-right:5px; vertical-align:1px;}
+.lw-play-txt{white-space:normal;}
+
+/* ---- drill-down: one matchup, full box score ------------------------ */
+.lw-open{display:block; padding:5px 14px 0; text-align:center; text-decoration:none;}
+.lw-open-lbl{font-family:var(--lw-disp); font-size:10px; text-transform:uppercase;
+  letter-spacing:.1em; color:var(--lw-muted); border-bottom:1px solid transparent;}
+.lw-open:hover .lw-open-lbl{color:var(--lw-accent); border-bottom-color:var(--lw-accent);}
+.lw-open:focus-visible{outline:2px solid var(--lw-accent); outline-offset:-2px;}
+
+.lw-back{display:inline-block; margin-bottom:10px; color:var(--lw-accent);
+  font-family:var(--lw-disp); text-transform:uppercase; letter-spacing:.07em;
+  font-size:12.5px; font-weight:700; text-decoration:none;}
+.lw-back:hover{color:var(--lw-big);}
+.lw-game-detail{margin-bottom:14px;}
+.lw-proj-line{padding:9px 14px 11px; font-family:var(--lw-mono); font-size:12px;
+  color:var(--lw-muted); text-align:center;}
+.lw-proj-line strong{color:var(--lw-text);}
+
+.lw-rosters{display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start;}
+.lw-roster{background:var(--lw-surface); border:1px solid var(--lw-line);
+  border-radius:14px; padding:12px 14px 14px; min-width:0;}
+.lw-roster-h{font-family:var(--lw-disp); font-size:17px; margin:0 0 2px;
+  display:flex; align-items:baseline; gap:8px; color:var(--lw-text);}
+.lw-roster-h span{margin-left:auto; font-family:var(--lw-mono); font-size:15px;
+  color:var(--lw-accent); font-variant-numeric:tabular-nums;}
+.lw-roster-sub{font-family:var(--lw-disp); font-size:10px; text-transform:uppercase;
+  letter-spacing:.11em; color:var(--lw-muted); margin:12px 0 5px; font-weight:700;}
+.lw-plist{display:flex; flex-direction:column;}
+.lw-plist.muted{opacity:.62;}   /* the bench scores nothing */
+.lw-prow{padding:6px 0;}
+.lw-prow-top{display:flex; align-items:center; gap:9px;}
+/* A soft break between position GROUPS (QB/RB/WR/... per
+   ROTC_LW_POSITION_ORDER) rather than a line under every player -- the
+   groups are what someone scanning the roster actually wants marked. */
+.lw-prow.lw-pos-start{margin-top:8px; padding-top:12px; border-top:1px solid rgba(58,42,34,.55);}
+.lw-prow img,.lw-prow .lw-av{width:32px; height:24px; border-radius:4px;
+  object-fit:cover; object-position:top center; flex:none;}
+.lw-prow-main{flex:1; min-width:0;}
+.lw-prow-n{display:block; font-size:13px; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis;}
+.lw-prow-meta{color:var(--lw-muted); font-size:11px; margin-left:4px;}
+.lw-prow-stat{display:block; font-family:var(--lw-mono); font-size:10.5px;
+  color:var(--lw-big); margin-top:1px; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis;}
+.lw-prow-stat.dim{color:var(--lw-muted);}
+.lw-prow-nums{flex:none; text-align:right;}
+.lw-prow-pts{display:block; font-family:var(--lw-mono); font-size:14px; font-weight:700;
+  font-variant-numeric:tabular-nums;}
+.lw-prow-proj{display:block; font-family:var(--lw-mono); font-size:9.5px; color:var(--lw-muted);}
+/* A live player is the one worth looking at; done and yet-to-play recede. */
+.lw-prow.live .lw-prow-n{color:var(--lw-text); font-weight:600;}
+.lw-prow.live{box-shadow:inset 2px 0 0 var(--lw-accent); padding-left:7px;}
+.lw-prow.yet .lw-prow-n,.lw-prow.yet .lw-prow-pts{color:var(--lw-muted);}
+
+@media (max-width:680px){
+  /* Rosters stack: two columns of box score at 375px is unreadable. */
+  .lw-rosters{grid-template-columns:1fr;}
+  .lw-prow img,.lw-prow .lw-av{display:none;}
+  .lw-roster{padding:11px 12px 12px;}
+}
+
+/* ---- how the score was earned --------------------------------------
+   Each stat with the points it produced under this league's rules.
+   Chips rather than a table: the list is short, ragged per position, and
+   has to survive a narrow column beside a second roster. */
+.lw-calc{display:flex; flex-wrap:wrap; gap:4px; margin:5px 0 1px 41px;}
+.lw-prow.yet .lw-calc{display:none;}
+.lw-calc-item{display:inline-flex; align-items:baseline; gap:4px;
+  background:rgba(0,0,0,.22); border:1px solid var(--lw-line);
+  border-radius:6px; padding:2px 6px; font-size:10.5px; line-height:1.5;}
+.lw-calc-stat{font-family:var(--lw-mono); font-weight:700; color:var(--lw-text);
+  font-variant-numeric:tabular-nums;}
+.lw-calc-lbl{color:var(--lw-muted);}
+.lw-calc-pts{font-family:var(--lw-mono); font-weight:700; color:var(--lw-big);
+  font-variant-numeric:tabular-nums;}
+/* The reconciliation line: what MFL's score contains that a box score
+   can't explain. Muted, because it's an admission, not a stat. */
+.lw-calc-item.other{border-style:dashed;}
+.lw-calc-item.other .lw-calc-pts{color:var(--lw-muted);}
+.lw-calc-note{font-size:11px; color:var(--lw-muted); margin:10px 2px 0; line-height:1.5;}
+@media (max-width:680px){ .lw-calc{margin-left:0;} }

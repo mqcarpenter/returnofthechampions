@@ -1,0 +1,1257 @@
+/* ============================================================
+   mfl26.css - ROTC standalone site
+   Ported from the MFL-hosted version at
+   https://www.returnofthechampions.com/css/mfl26.css
+
+   CHANGES FROM THE MFL VERSION:
+   - Sections that only existed to fight MFL's own markup
+     (hiding stock menu, restyling MFL's tab bar, hiding
+     table.pageheader) are removed — there's no MFL chrome
+     to hide here, this is your own HTML.
+   - .report / .homepagemodule selectors kept and renamed to
+     plain, semantic classes (.data-table, .card) since you
+     control the markup now and don't need to match MFL's
+     table class names.
+   - Hero banner image/logo lockup is gone. The news carousel
+     (#rotc-postcarousel) is now the full-width hero — see the
+     note from Matteo: no banner, carousel goes edge to edge,
+     tabs/colors stay muted rather than high-contrast.
+   - Everything else (nav, footer, carousel, sidefeed) is a
+     straight port — same class names, same behavior, so this
+     stylesheet is a near-drop-in for the templates in ../templates.
+   ============================================================ */
+
+/* ---- 1. PALETTE TOKENS ------------------------------------ */
+:root{
+  --ink:    #2A1810;   /* darkest chrome: nav, footer */
+  --ink-2:  #4A2312;   /* brown: links, secondary chrome */
+  --accent: #E0531B;   /* orange: the one bright color */
+  --paper:  #FDFBF7;   /* cream: page + odd rows */
+  --card:   #FFFFFF;   /* white: cards + even rows */
+  --sand:   #EFEAE2;   /* tint: hover + highlighted row */
+  --line:   #E4DACE;   /* hairline divider */
+  --muted:  #8A7A6C;   /* dates, secondary text */
+  --on-ink: #FDFBF7;   /* text on dark chrome */
+  --module-head:      #DCCFB2;
+  --module-head-text: #1A1310;
+  --radius: 14px;
+}
+
+/* ---- 2. TYPE + PAGE FRAME ---------------------------------- */
+*{ box-sizing:border-box; }
+body{
+  font-family:"Roboto", Arial, sans-serif;
+  color:var(--ink);
+  background:var(--module-head);
+  margin:0;
+}
+.page{ background:var(--paper); max-width:1400px; margin:0 auto; }
+a{ color:var(--ink-2); text-decoration:none; }
+a:hover{ color:var(--accent); }
+
+/* ---- 3. SECTION HEADERS ------------------------------------
+   Condensed, uppercase, bold, short accent underline.
+   Applies to any card/module/report title. */
+.card-title, .data-table caption{
+  background:transparent;
+  color:var(--ink);
+  font-family:"Roboto Condensed", "Arial Narrow", sans-serif;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  font-size:20px;
+  text-align:left;
+  padding:14px 4px 0 4px;
+  margin:0;
+}
+.card-title::after, .data-table caption::after{
+  content:"";
+  display:block;
+  width:52px;
+  height:3px;
+  background:var(--accent);
+  margin:7px 0 10px 0;
+}
+
+/* ---- 4. CARD (was .homepagemodule) -------------------------- */
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  padding:0 12px 12px 12px;
+  margin-bottom:18px;
+}
+.home-col{ vertical-align:top; padding:0 8px; }
+
+/* ---- 5. DATA TABLE (was .report) ---------------------------- */
+.data-table{
+  width:100%;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  border-collapse:separate;
+  border-spacing:0;
+  overflow:hidden;
+}
+.data-table th{
+  background:var(--module-head);
+  color:var(--module-head-text);
+  font-family:"Roboto Condensed", sans-serif;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  font-size:11px;
+  padding:8px 10px;
+  border:0;
+  text-align:left;
+}
+.data-table tr.odd td{  background:var(--card);  }
+.data-table tr.even td{ background:var(--paper); }
+.data-table td{
+  border-bottom:1px solid var(--line);
+  padding:8px 10px;
+}
+.data-table tr:hover td{ background:var(--sand); }
+.data-table td.pwr{ font-family:"Roboto Condensed", sans-serif; font-weight:700; color:var(--accent); }
+.data-table tr.my-franchise td{ background:var(--sand); box-shadow:inset 3px 0 0 var(--accent); }
+
+/* Rosters page -- per-franchise tables sit in a multi-column card grid
+   (as narrow as ~380px), so this is a deliberately tighter, fixed-layout
+   variant of .data-table: table-layout:fixed + percentage column widths
+   means content wraps within its column instead of ever forcing the
+   table wider than its card (which is what caused Acquired to get
+   clipped -- overflow-x:auto scroll was technically there but nobody
+   found it). word-break on the Acquired/Player cells is the safety net
+   for the rare very-long single token. */
+.rotc-roster-table{ table-layout:fixed; width:100%; }
+.rotc-roster-table th, .rotc-roster-table td{ padding:6px 5px; font-size:12px; overflow-wrap:break-word; word-break:break-word; }
+.rotc-roster-table th{ font-size:10px; }
+.rotc-roster-table td:first-child{ padding:4px 2px; text-align:center; }
+
+/* Rule between position groups on the trade-offer give-up/receive tables. */
+.rotc-position-sep td{ padding:2px 0; border:none; }
+.rotc-position-sep hr{ border:none; border-top:1px solid var(--line); margin:4px 0; }
+
+
+@media (max-width:767px){
+  .home-col{ display:block; width:100% !important; padding:0; }
+  .card-title, .data-table caption{ font-size:17px; }
+}
+
+/* ---- 5b. TWO-COLUMN HOME LAYOUT ------------------------------
+   Main column (hero + report cards) beside the sidebar
+   (rotc-sidefeed). Matches the reference screenshot proportions. */
+.home-grid{ display:grid; grid-template-columns:2fr 1fr; gap:20px; padding:20px; align-items:start; }
+@media (max-width:900px){ .home-grid{ grid-template-columns:1fr; } }
+/* Every built report page (rosters, free agents, standings, etc.) reuses
+   .home-grid but only ever renders the <main>, no <aside> sidebar -- the
+   2fr/1fr split was still reserving a blank 1/3 of the page for a
+   sidebar that doesn't exist there, capping every report to ~66% of the
+   available width regardless of screen size. Only the homepage
+   (index.php) actually has two children (<main> + <aside
+   class="home-sidebar">), so :only-child correctly targets every other
+   page without touching per-page markup. */
+.home-grid > .home-main:only-child{ grid-column: 1 / -1; }
+
+/* ---- 6. NAV (rotc-nav) — unchanged from MFL version -------- */
+.rotc-nav{ font-family:"Roboto",Arial,sans-serif; background:var(--ink); position:sticky; top:0; z-index:9999; }
+.rotc-nav *{ box-sizing:border-box; }
+.rotc-bar{ display:flex; align-items:center; gap:28px; max-width:none; margin:0; padding:0 20px; height:62px; }
+.rotc-brand{ display:flex; align-items:center; text-decoration:none; flex:0 0 auto; }
+.rotc-nav .rotc-brand .rotc-logo{ height:36px !important; width:auto !important; max-height:36px !important; max-width:140px !important; object-fit:contain; display:block; }
+
+/* WhatsApp icon nav item -- replaces the old Social dropdown tree.
+   Uses .rotc-top for consistent hover/padding but isn't a dropdown, so
+   the mobile ::after "+" indicator (added for every .rotc-top at the
+   mobile breakpoint below) needs to be suppressed on this one item. */
+.rotc-whatsapp-link{ display:flex; align-items:center; justify-content:center; padding:20px 4px; color:rgba(253,251,247,.82); }
+.rotc-whatsapp-link:hover{ color:#25D366; }
+.rotc-whatsapp-link::after{ content:none !important; }
+
+.rotc-burger{ display:none; }
+.rotc-burger-btn{ display:none; margin-left:auto; color:var(--paper); font-size:26px; line-height:1; cursor:pointer; user-select:none; }
+.rotc-menu{ list-style:none; display:flex; align-items:center; justify-content:space-between; flex:1; gap:10px; margin:0; padding:0; }
+.rotc-item{ position:relative; }
+.rotc-toggle{ display:none; }
+.rotc-top{ display:block; font-family:"Roboto Condensed",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.08em; font-size:14px; color:rgba(253,251,247,.82); padding:22px 4px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:color .15s; }
+.rotc-item:hover .rotc-top{ color:var(--paper); border-bottom-color:var(--accent); }
+.rotc-login{ margin-left:0; }
+.rotc-login .rotc-top{ color:var(--accent); }
+.rotc-coach-pill{
+  display:flex; align-items:center; gap:8px;
+  padding:8px 16px !important;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--on-ink) !important;
+  border-bottom:none !important;
+  text-transform:none;
+  letter-spacing:normal;
+  font-weight:600;
+}
+.rotc-coach-pill:hover{ background:#c8481a; color:var(--on-ink) !important; }
+.rotc-coach-pill-helmet{ width:22px; height:22px; border-radius:50%; object-fit:cover; background:var(--paper); flex:none; }
+@media (max-width:900px){
+  .rotc-coach-pill{ padding:10px 16px !important; }
+}
+.rotc-sub{ list-style:none; margin:0; padding:6px; position:absolute; top:100%; left:0; width:240px; max-width:90vw; background:var(--card); border:1px solid var(--line); box-shadow:0 8px 20px rgba(42,24,16,.18); display:none; z-index:10000; box-sizing:border-box; overflow:hidden; }
+.rotc-sub a,
+.rotc-sub span.rotc-nav-inactive{ overflow-wrap:break-word; word-break:break-word; display:block; padding:7px 10px; font-size:13px; color:var(--ink-2); }
+/* Open-on-hover is for real hover devices only. On a touchscreen the
+   first tap simulates :hover on the <li>, which -- combined with the
+   mobile hover-hide rules that used to live below -- fought the
+   checkbox :checked toggle and left wide menus (Reports) flipping their
+   +/- but never dropping (or dropping blank). Gating hover-open behind
+   (hover:hover) means touch relies purely on the checkbox. */
+@media (hover:hover){
+  .rotc-item:hover .rotc-sub{ display:block; }
+  .rotc-item.wide:hover .rotc-sub{ display:flex; }
+}
+.rotc-item.wide .rotc-sub{ width:480px; }
+.rotc-sub-col{ list-style:none; margin:0; padding:0; flex:1 1 50%; min-width:0; }
+.rotc-item:nth-child(n+4) .rotc-sub{ left:auto; right:0; }
+/* (hover:hover) guard: iOS Safari (and touchscreens generally) treats the
+   FIRST tap on a link as simulating its :hover state rather than
+   following it, when that link has a :hover rule that changes its look --
+   a second tap is then needed to actually navigate. That's invisible on
+   desktop (real hover devices) but on a touchscreen it read as "the
+   submenu opens but its links don't respond to taps." Scoping these
+   :hover rules to real hover-capable pointers only means touch devices
+   never match them, so the first tap just navigates normally. */
+@media (hover:hover){
+  .rotc-sub a:hover{ background:var(--sand); color:var(--accent); }
+}
+@media (max-width:1100px){
+  .rotc-bar{ flex-wrap:wrap; height:auto; padding:10px 16px; }
+  .rotc-burger-btn{ display:block; }
+  .rotc-menu{ flex-direction:column; align-items:stretch; gap:0; width:100%; display:none; padding-top:6px; }
+  /* .rotc-menu is a direct sibling of #rotc-burger inside .rotc-bar,
+     not nested inside a second .rotc-bar sibling -- the old selector
+     (.rotc-burger:checked ~ .rotc-bar .rotc-menu) could never match
+     anything in the real DOM, so the checkbox toggled but nothing
+     ever appeared. This targets .rotc-menu directly. */
+  .rotc-burger:checked ~ .rotc-menu{ display:flex; }
+  .rotc-item{ position:static; }
+  .rotc-top{ padding:12px 4px; border-bottom:1px solid rgba(255,255,255,.12); }
+  .rotc-item:hover .rotc-top{ border-bottom-color:rgba(255,255,255,.12); }
+  .rotc-top::after{ content:"+"; float:right; color:var(--accent); font-weight:700; }
+  .rotc-toggle:checked + .rotc-top::after{ content:"-"; }
+  .rotc-sub{ position:static; display:none; border:0; box-shadow:none; background:rgba(255,255,255,.04); padding:0 0 6px 10px; width:auto; }
+  /* No hover-hide counters here anymore -- hover-open is gated to
+     (hover:hover) above, so on touch the checkbox alone controls the
+     submenu and there is nothing for a sticky :hover to fight. */
+  .rotc-toggle:checked ~ .rotc-sub{ display:block; }
+  .rotc-item.wide .rotc-toggle:checked ~ .rotc-sub{ display:block; }
+  .rotc-item.wide .rotc-sub{ width:auto; }
+  .rotc-sub-col{ flex:none; }
+  .rotc-sub a{ color:var(--paper); }
+  .rotc-sub span.rotc-nav-inactive{ color:#c9bcae66 !important; }
+}
+/* Same (hover:hover) guard as above, mobile colors -- kept as its own
+   combined query rather than nested inside (max-width:1100px) above for
+   plain-CSS compatibility (no CSS nesting spec dependency). */
+@media (max-width:1100px) and (hover:hover){
+  .rotc-sub a:hover{ background:rgba(224,83,27,.15); color:var(--accent); }
+}
+
+/* ---- Draft Day announcement banner (front page) ---------- */
+.rotc-draft-banner{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  background:linear-gradient(135deg,#3a2013 0%,var(--ink) 55%,#160c05 100%);
+  border:1px solid rgba(224,83,27,.55); border-left:5px solid var(--accent);
+  border-radius:var(--radius); padding:18px 22px; margin:0 0 18px;
+  box-shadow:0 10px 26px -14px rgba(42,24,16,.5);
+}
+.rotc-draft-banner-body{ flex:1 1 260px; min-width:0; }
+.rotc-draft-eyebrow{
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase; letter-spacing:.14em;
+  font-size:11px; font-weight:700; color:var(--accent); margin:0 0 4px;
+}
+.rotc-draft-title{
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase; letter-spacing:.02em;
+  font-size:22px; font-weight:700; color:var(--on-ink); line-height:1.1; margin:0;
+}
+.rotc-draft-when{ color:rgba(253,251,247,.82); font-size:14px; margin:6px 0 0; }
+.rotc-draft-when strong{ color:#fff; }
+.rotc-draft-cta{
+  flex:none; display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase; letter-spacing:.06em;
+  font-weight:700; font-size:15px; color:#fff; text-decoration:none;
+  background:linear-gradient(135deg,#F0692F,#E0531B 58%,#C0410F);
+  padding:13px 22px; border-radius:10px; box-shadow:0 8px 20px -8px rgba(224,83,27,.7);
+  transition:filter .15s, transform .08s;
+}
+.rotc-draft-cta:hover{ filter:brightness(1.07); }
+.rotc-draft-cta:active{ transform:translateY(1px); }
+@media (max-width:560px){
+  .rotc-draft-banner{ padding:16px 18px; }
+  .rotc-draft-title{ font-size:19px; }
+  .rotc-draft-cta{ width:100%; justify-content:center; }
+}
+
+/* ---- 7. TAB BAR (was .myfantasyleague_tabmenu) --------------
+   Your own tabs now, not MFL's — ghost style: pill-shaped outline,
+   no solid fill. Active tab gets a ring instead of the old filled-
+   pill look; plain markup instead of fighting MFL's #homepagetabs. */
+.tab-bar{ background:var(--paper); border-bottom:1px solid var(--line); padding:10px 20px; }
+.tab-bar ul{ display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; }
+.tab-bar a{
+  display:block;
+  color:var(--ink-2);
+  font-family:"Roboto Condensed", sans-serif;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  font-size:12px;
+  padding:9px 18px;
+  border-radius:999px;
+  border:1px solid transparent;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.tab-bar li:hover a{ background:var(--sand); color:var(--ink); }
+.tab-bar li.current a{ background:transparent; color:var(--ink); border-color:var(--ink); }
+
+/* ---- 8. MATCHUP TICKER (rotc-ticker) ------------------------
+   Superseded — Matteo shared the real rotc-header.html source and the
+   live ticker builds its own DOM at runtime with inline styles, not
+   these classes. The guess below was wrong; see templates/matchup-ticker.php
+   for the actual port. Nothing in this project references .rotc-ticker-*
+   anymore — left deleted rather than kept as dead weight. */
+
+/* ---- 9. HERO CAROUSEL (rotc-postcarousel) -------------------
+   Full-width per Matteo's note — meaning it fills its own column
+   edge to edge (no card border/padding like a boxed module), not
+   that it spans behind the sidebar. Sits at the top of the main
+   column, sidebar (rotc-sidefeed) sits beside it — see the
+   two-column layout in home.php / .home-grid below. */
+#rotc-postcarousel{ margin-bottom:18px; }
+#rotc-postcarousel .rotc-pc-track{
+  position:relative;
+  height:clamp(280px, 28vw, 420px);
+  overflow:hidden;
+  background:var(--ink);
+}
+#rotc-postcarousel .rotc-pc-slide{
+  position:absolute; inset:0;
+  opacity:0; transition:opacity .4s;
+  pointer-events:none;
+}
+#rotc-postcarousel .rotc-pc-slide.active{ opacity:1; pointer-events:auto; }
+#rotc-postcarousel .rotc-pc-img{
+  position:absolute; inset:0;
+  background-size:cover; background-position:center center;
+}
+#rotc-postcarousel .rotc-pc-img::after{
+  content:"";
+  position:absolute; inset:0;
+  background:linear-gradient(to left,
+    rgba(30,12,4,.92) 0%,
+    rgba(224,83,27,.85) 22%,
+    rgba(224,83,27,.45) 50%,
+    rgba(224,83,27,0) 78%);
+}
+#rotc-postcarousel .rotc-pc-body{
+  position:absolute; top:0; bottom:0; right:0;
+  width:min(56%, 560px);
+  display:flex; flex-direction:column; justify-content:flex-end;
+  padding:32px 40px; z-index:2;
+}
+#rotc-postcarousel .rotc-pc-meta{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,255,255,.85); margin-bottom:8px; }
+#rotc-postcarousel .rotc-pc-body h1{ margin:0 0 10px; font-family:"Roboto Condensed", sans-serif; font-weight:700; font-size:32px; line-height:1.15; color:#fff; }
+#rotc-postcarousel .rotc-pc-body h1 a{ color:#fff; }
+#rotc-postcarousel .rotc-pc-body h1 a:hover{ color:#FFD9C7; }
+#rotc-postcarousel .rotc-pc-excerpt{ font-size:14px; line-height:1.5; color:rgba(255,255,255,.95); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+#rotc-postcarousel .rotc-pc-arrow{
+  position:absolute; top:50%; transform:translateY(-50%); z-index:3;
+  background:rgba(0,0,0,.35); color:#fff; border:0; border-radius:50%;
+  width:36px; height:36px; cursor:pointer; font-size:14px;
+}
+#rotc-postcarousel .rotc-pc-arrow:hover{ background:rgba(0,0,0,.6); }
+#rotc-postcarousel .rotc-pc-prev{ left:16px; }
+#rotc-postcarousel .rotc-pc-next{ right:16px; }
+#rotc-postcarousel .rotc-pc-dots{ position:absolute; left:16px; bottom:18px; z-index:3; margin:0; }
+#rotc-postcarousel .rotc-pc-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; margin:0 4px 0 0; background:rgba(255,255,255,.5); cursor:pointer; }
+#rotc-postcarousel .rotc-pc-dot.active{ background:#fff; }
+
+/* ---- 9b. NEWS GRID (past articles, below the carousel) --------
+   CBSSports-style "More Headlines" pattern (Matteo referenced this
+   directly): a couple of "large" stories (bigger image + excerpt)
+   beside a grid of "small" stories (thumb + headline only, no
+   excerpt), then a small/discreet link to older articles -- see
+   templates/news-grid.php + includes/wp-hero-feed.php. */
+.rotc-news-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:24px; align-items:start; }
+@media (max-width:820px){ .rotc-news-grid{ grid-template-columns:1fr; } }
+
+.rotc-news-large-col{ display:flex; flex-direction:column; gap:20px; }
+.rotc-news-large{ display:flex; gap:14px; }
+.rotc-news-large-media{ flex:0 0 42%; aspect-ratio:4/3; border-radius:8px; overflow:hidden; display:block; background:var(--sand); }
+.rotc-news-large-media img{ width:100%; height:100%; object-fit:cover; display:block; }
+.rotc-news-large-body{ flex:1; min-width:0; }
+.rotc-news-large-title{ font-size:17px; line-height:1.3; margin:0 0 6px; font-weight:700; }
+.rotc-news-large-title a{ color:var(--ink); }
+.rotc-news-large-title a:hover{ color:var(--accent); }
+.rotc-news-large-excerpt{ font-size:13px; color:var(--muted); margin:0 0 6px; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+
+.rotc-news-small-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; }
+.rotc-news-small{ display:flex; gap:10px; }
+.rotc-news-small-media{ flex:0 0 56px; width:56px; height:56px; border-radius:6px; overflow:hidden; display:block; background:var(--sand); }
+.rotc-news-small-media img{ width:100%; height:100%; object-fit:cover; display:block; }
+.rotc-news-small-body{ flex:1; min-width:0; }
+.rotc-news-small-title{ font-size:13px; line-height:1.3; margin:0 0 4px; font-weight:700; }
+.rotc-news-small-title a{ color:var(--ink); }
+.rotc-news-small-title a:hover{ color:var(--accent); }
+
+.rotc-news-byline{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:11px; color:var(--muted); }
+
+.rotc-news-older{ margin-top:16px; padding-top:12px; border-top:1px solid var(--line); text-align:right; }
+.rotc-news-older a{ font-size:12px; color:var(--muted); }
+.rotc-news-older a:hover{ color:var(--accent); }
+
+/* ---- 10. SIDEBAR TABS (rotc-sidefeed) ----------------------- */
+.rotc-sidefeed{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  overflow:hidden; margin-bottom:18px; font-family:"Roboto", Arial, sans-serif;
+}
+.rotc-sidefeed-tabs{ display:flex; border-bottom:1px solid var(--line); background:var(--sand); }
+.rotc-sidefeed-tab{
+  flex:1; text-align:center; padding:12px 8px;
+  font-weight:700; font-size:13px; letter-spacing:.03em; text-transform:uppercase;
+  color:var(--muted); cursor:pointer; border-bottom:3px solid transparent;
+  background:none; border-top:0; border-left:0; border-right:0; user-select:none;
+}
+.rotc-sidefeed-tab.active{ color:var(--ink); border-bottom-color:var(--accent); }
+.rotc-sidefeed-panel{ display:none; padding:4px 0; }
+.rotc-sidefeed-panel.active{ display:block; }
+.rotc-sidefeed-item{ padding:10px 14px 12px; border-bottom:1px dashed var(--line); }
+.rotc-sidefeed-item:last-child{ border-bottom:0; }
+.rotc-sidefeed-item .tag{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.rotc-sidefeed-item .title{ display:block; font-weight:700; font-size:13px; margin:2px 0 4px; color:var(--ink); }
+.rotc-sidefeed-item .title:hover{ color:var(--accent); }
+.rotc-sidefeed-item .desc{ font-size:12px; line-height:1.5; color:var(--muted); }
+
+/* ---- 11. FOOTER (rotc-foot) — unchanged from MFL version --- */
+.rotc-foot{ --fline:rgba(255,255,255,.12); --fmuted:#B7A99B; font-family:"Roboto",Arial,sans-serif; background:var(--ink); color:var(--paper); border-top:3px solid var(--accent); margin-top:24px; }
+.rotc-foot *{ box-sizing:border-box; }
+.rotc-foot-grid{ max-width:1200px; margin:0 auto; padding:32px 16px 20px; display:grid; grid-template-columns:1.6fr 1fr 1fr; gap:28px; }
+.rotc-foot h4{ font-family:"Roboto Condensed",sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.06em; font-size:13px; margin:0 0 12px; color:var(--paper); }
+.rotc-foot h4::after{ content:""; display:block; width:36px; height:3px; background:var(--accent); margin-top:6px; }
+.rotc-foot-brand b{ display:block; font-family:"Roboto Condensed",sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:19px; line-height:1.1; }
+.rotc-foot-brand b span{ color:var(--accent); }
+.rotc-foot-brand p{ color:var(--fmuted); font-size:13px; line-height:1.6; margin:8px 0 0; max-width:34ch; }
+.rotc-foot ul{ list-style:none; margin:0; padding:0; }
+.rotc-foot li{ margin:0 0 8px; }
+.rotc-foot a{ color:var(--paper); font-size:13px; }
+.rotc-foot a:hover{ color:var(--accent); }
+.rotc-foot-group + .rotc-foot-group{ margin-top:22px; }
+.rotc-foot-bar{ border-top:1px solid var(--fline); }
+.rotc-foot-bar div{ max-width:1200px; margin:0 auto; padding:14px 16px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--fmuted); }
+.rotc-foot-bar a{ font-size:12px; color:var(--fmuted); }
+.rotc-foot-bar a:hover{ color:var(--accent); }
+@media (max-width:760px){ .rotc-foot-grid{ grid-template-columns:1fr; gap:22px; } }
+
+/* Collapsible conference/division groups on transactions/rosters.php.
+   Native <details>/<summary> needs no JS; this just hides the default
+   marker (styled differently per-browser) in favor of one custom arrow
+   glyph that rotates via the [open] attribute selector. */
+.rotc-division-group > summary { user-select: none; }
+.rotc-division-group > summary::-webkit-details-marker { display: none; }
+.rotc-division-group > summary::marker { content: ''; }
+.rotc-division-group .rotc-details-arrow { display: inline-block; transition: transform .15s ease; }
+.rotc-division-group[open] > summary .rotc-details-arrow { transform: rotate(90deg); }
+
+/* Fixed 2-per-row grid for roster cards within a division (rather than
+   auto-fit, which let 3-4 narrow cards pack into a row on wide screens
+   and forced the roster table inside each one to word-wrap). Two cards
+   gives each table enough width for its columns; collapses to a single
+   column on narrow viewports so it still respects small screens. */
+.rotc-roster-division-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:12px; }
+@media (max-width:900px){ .rotc-roster-division-grid{ grid-template-columns:1fr; } }
+
+/* Front-page "newspaper" recap: hero (Game of the Week) + hub (every
+   other matchup that week) — see includes/weekly-recap.php and
+   templates/weekly-recap-hub.php. News-homepage layout: one big
+   focal story (headline + a large helmet standing in for a hero
+   photo) up top, then a two-column grid of smaller story rows below
+   it, each pairing a category tag + headline + blurb with a small
+   helmet thumbnail, matching a classic news-hub front page. Kept
+   inside the existing .card wrapper on index.php, so no card border/
+   radius/background repeated here, just the internal layout. */
+.rotc-recap-hero{ display:flex; gap:24px; align-items:center; padding-bottom:20px; border-bottom:1px solid var(--line); margin-bottom:6px; flex-wrap:wrap; }
+.rotc-recap-hero-media{ flex:0 0 auto; }
+.rotc-recap-hero-helmet{ width:150px; height:150px; object-fit:contain; display:block; }
+.rotc-recap-hero-body{ flex:1 1 320px; min-width:240px; }
+.rotc-recap-kicker{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.08em; font-size:12px; color:var(--accent); font-weight:700; margin-bottom:6px; }
+.rotc-recap-headline{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:28px; line-height:1.15; margin:0 0 8px; color:var(--ink); }
+.rotc-recap-byline{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--muted); margin-bottom:10px; }
+.rotc-recap-blurb{ font-size:15px; line-height:1.55; margin:0; }
+.rotc-recap-card-kicker{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.06em; font-size:11px; color:var(--accent); font-weight:700; margin-bottom:4px; }
+.rotc-recap-blurb .rotc-player-hover{ border-bottom:1px dotted var(--muted); }
+
+/* Key-performer headshot, shown inline (not just on hover) so the
+   article/tile leads with the star's face -- hero size next to the
+   150px helmet, a small round chip everywhere else (hub tiles, season
+   rail cards, archive-adjacent cards). rotc_recap_top_performer_photo()
+   in includes/weekly-recap.php removes itself onerror, so a player
+   with no ESPN headshot on file just leaves the helmet/text alone. */
+.rotc-recap-hero-photo{ width:72px; height:72px; object-fit:cover; object-position:top center; border-radius:50%; border:3px solid var(--card); box-shadow:0 0 0 1px var(--line); margin-left:-16px; flex:none; }
+.rotc-recap-tile-photo{ width:34px; height:34px; object-fit:cover; object-position:top center; border-radius:50%; flex:none; margin-left:auto; }
+
+/* Interactive hub: primary article left, hub-style tiles (helmet +
+   headline + key-performer photo, not a plain text list) right --
+   clicking a tile swaps which article is shown in the primary spot
+   (JS in templates/weekly-recap-hub.php), same shape as a classic
+   news-hub front page. Every article is pre-rendered and just
+   hidden/shown, so switching stories is instant, no reload. The same
+   tile markup/classes are reused (as plain <a> links instead of
+   buttons) for the season-long "Top Games" rail below. */
+.rotc-recap-hub-wrap{ display:grid; grid-template-columns:2fr 1fr; column-gap:32px; align-items:start; margin-top:6px; }
+.rotc-recap-list{ display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--line); padding-top:8px; }
+.rotc-recap-hub-tile{ display:flex; align-items:center; gap:10px; text-align:left; background:none; border:1px solid var(--line); border-radius:var(--radius); padding:8px 10px; cursor:pointer; font-family:inherit; text-decoration:none; color:inherit; }
+.rotc-recap-hub-tile:hover{ background:var(--sand); }
+.rotc-recap-hub-tile.active{ background:var(--sand); box-shadow:inset 3px 0 0 var(--accent); }
+.rotc-recap-tile-helmet{ width:36px; height:36px; object-fit:contain; flex:none; }
+.rotc-recap-tile-text{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
+.rotc-recap-list-kicker{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.06em; font-size:10px; color:var(--accent); font-weight:700; }
+.rotc-recap-list-headline{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:14px; line-height:1.25; color:var(--ink); }
+.rotc-recap-list-score{ font-size:12px; color:var(--muted); }
+@media (max-width:900px){ .rotc-recap-hub-wrap{ grid-template-columns:1fr; } }
+@media (max-width:600px){ .rotc-recap-hero{ flex-direction:column; align-items:flex-start; } .rotc-recap-hero-helmet{ width:110px; height:110px; } .rotc-recap-headline{ font-size:22px; } .rotc-recap-hero-photo{ margin-left:0; } }
+
+/* Season-long "Top Games" rail and the "Recap Archive" strip, both
+   below the current week's hub (see rotc_season_top_games() and
+   rotc_recap_archive_weeks() in includes/weekly-recap.php) -- past
+   weeks stay reachable from this same front-page section instead of
+   only living on the standalone recap article page. */
+.rotc-recap-subhead{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:15px; color:var(--ink); margin:20px 0 10px; padding-top:14px; border-top:1px solid var(--line); }
+.rotc-recap-season-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; }
+.rotc-recap-season-card{ display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:var(--radius); padding:8px 10px; text-decoration:none; color:inherit; }
+.rotc-recap-season-card:hover{ background:var(--sand); }
+.rotc-recap-archive-strip{ display:flex; flex-wrap:wrap; gap:8px; }
+.rotc-recap-archive-item{ display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:var(--radius); padding:6px 10px; text-decoration:none; color:inherit; font-size:12px; }
+.rotc-recap-archive-item:hover{ background:var(--sand); }
+.rotc-recap-archive-week{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:10px; color:var(--accent); font-weight:700; }
+.rotc-recap-archive-headline{ color:var(--ink); }
+
+/* Sidebar "Top Adds/Drops" tab (templates/sidefeed.php, replacing the
+   dead Videos tab) -- compact trending-player rows: logo, hoverable
+   name, position, trend percent. */
+.rotc-trending-group{ padding:6px 14px 10px; }
+.rotc-trending-heading{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:11px; color:var(--muted); margin:6px 0 4px; }
+.rotc-trending-row{ display:flex; align-items:center; gap:6px; padding:4px 0; border-bottom:1px dashed var(--line); font-size:12px; }
+.rotc-trending-row:last-child{ border-bottom:0; }
+.rotc-trending-name{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.rotc-trending-pos{ color:var(--muted); flex:0 0 auto; }
+.rotc-trending-pct{ color:var(--accent); font-weight:700; flex:0 0 auto; }
+.rotc-trend-arrow{ flex:0 0 auto; font-size:10px; }
+.rotc-trend-up{ color:#1e7d32; }
+.rotc-trend-down{ color:#b3261e; }
+.rotc-trend-flat{ color:var(--muted); }
+
+/* Owner login (login.php) + Franchise action pages (franchise/submit-
+   lineup.php, drop-player.php, offer-trade.php, survivor-pick.php,
+   pool-pick.php, trade-bait.php's submit form) -- shared form chrome
+   so every write-action page looks/feels consistent. See
+   includes/mfl-auth.php for the real login this all sits on top of. */
+.rotc-login-main{ width:100%; max-width:440px; margin:0 auto; }
+.rotc-login-blurb{ font-size:13px; color:var(--muted); margin-top:0; line-height:1.5; }
+.rotc-login-error{ color:#b3261e; font-weight:600; background:#fbe9e7; border:1px solid #f3c8c2; border-radius:8px; padding:10px 12px; }
+.rotc-login-success{ color:#1b5e20; font-weight:600; background:#e8f5e9; border:1px solid #c3e6c5; border-radius:8px; padding:10px 12px; }
+.rotc-login-form{ display:flex; flex-direction:column; gap:10px; }
+.rotc-login-form label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.rotc-login-form input[type="text"],
+.rotc-login-form input[type="password"]{ padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+
+.rotc-btn{ align-self:flex-start; padding:9px 18px; border-radius:8px; background:var(--accent); color:var(--on-ink); border:none; font-weight:700; font-size:14px; cursor:pointer; font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.03em; }
+.rotc-btn:hover{ opacity:.9; }
+.rotc-btn-danger{ background:#b3261e; }
+a.rotc-btn{ display:inline-block; text-decoration:none; }
+.rotc-btn-small{ padding:6px 14px; font-size:12px; margin-top:6px; }
+.rotc-btn-secondary{ background:var(--ink-2); }
+.rotc-pending-trade-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.rotc-pending-trade-actions form{ margin:0; }
+
+.rotc-inline-form{ display:flex; align-items:center; gap:8px; margin:10px 0 14px; font-size:13px; }
+.rotc-inline-form select{ padding:6px 8px; border:1px solid var(--line); border-radius:8px; }
+
+.rotc-lineup-form{ display:flex; flex-direction:column; gap:14px; }
+.rotc-lineup-table{ width:100%; border-collapse:collapse; font-size:13px; }
+.rotc-lineup-table th{ text-align:left; text-transform:uppercase; font-size:11px; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--line); padding:6px 8px; }
+.rotc-lineup-table td{ padding:6px 8px; border-bottom:1px solid var(--line); }
+.rotc-lineup-table tr:hover td{ background:var(--sand); }
+
+.rotc-sortable-th{ cursor:pointer; user-select:none; white-space:nowrap; }
+.rotc-sortable-th:hover{ color:var(--ink); }
+.rotc-sortable-th::after{ content:'\21C5'; margin-left:4px; font-size:10px; opacity:.35; }
+.rotc-sortable-th[data-sort-dir="asc"]::after{ content:'\2191'; opacity:1; }
+.rotc-sortable-th[data-sort-dir="desc"]::after{ content:'\2193'; opacity:1; }
+
+.rotc-trade-columns{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media (max-width:700px){ .rotc-trade-columns{ grid-template-columns:1fr; } }
+.rotc-trade-col-head{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:14px; margin:0 0 8px; }
+.rotc-trade-player{ display:block; padding:4px 0; font-size:13px; }
+.rotc-pending-trade{ border:1px solid var(--line); border-radius:var(--radius); padding:14px 18px; margin:0 0 14px; background:var(--card); }
+.rotc-pending-trade p{ margin:4px 0; font-size:14px; line-height:1.5; }
+.rotc-pending-trade-head{ display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:15px; }
+.rotc-pending-trade-helmet{ width:32px; height:32px; border-radius:50%; object-fit:cover; background:var(--paper); border:1px solid var(--line); flex:none; }
+.rotc-pending-trade-label{ display:inline-block; min-width:100px; font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.04em; color:var(--muted); }
+.rotc-trade-bait-players{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:2px 12px; }
+
+.rotc-pool-matchup{ display:flex; align-items:center; gap:14px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
+.rotc-pool-matchup span{ flex:0 0 110px; font-weight:700; }
+.rotc-pool-matchup label{ display:flex; align-items:center; gap:4px; }
+
+/* Menu rows that are listed but not usable right now -- "Make a Draft
+   Pick" while the league is in the auction, previously "Open an Auction"
+   while it was in the draft. Kept visible so owners know the option
+   exists, styled shadowy/muted so it doesn't read as a live link. The
+   nav renders these as a <span>, not an <a> (see rotc_nav_sub_item() in
+   templates/header.php), so they are genuinely unclickable, not just
+   dimmed; the a.* selector stays for franchise/index.php's action cards,
+   which are real anchors. */
+.rotc-nav-inactive,
+a.rotc-nav-inactive{ color:#8a7a6c99 !important; font-style:italic; cursor:default; }
+.rotc-nav-inactive:hover,
+a.rotc-nav-inactive:hover{ color:#8a7a6c99 !important; background:none !important; }
+
+/* franchise/index.php soft-landing grid of action cards. */
+.rotc-franchise-actions{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; margin-top:10px; }
+.rotc-franchise-action{ display:flex; flex-direction:column; gap:4px; border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
+.rotc-franchise-action:hover{ background:var(--sand); }
+.rotc-franchise-action-title{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-weight:700; font-size:14px; color:var(--ink); }
+.rotc-franchise-action-desc{ font-size:12px; color:var(--muted); }
+.rotc-franchise-action.rotc-nav-inactive .rotc-franchise-action-title,
+.rotc-franchise-action.rotc-nav-inactive .rotc-franchise-action-desc{ color:#8a7a6c99 !important; }
+.rotc-franchise-action.rotc-nav-inactive:hover{ background:none; }
+
+/* Submit Lineup table (franchise/submit-lineup.php) -- section header
+   rows double as the horizontal divider between position groups (QB,
+   RB, WR, TE, DL, LB, DB), via a heavier top border + module-head
+   background rather than a separate <hr>. */
+.rotc-lineup-section-row td{ background:var(--module-head); color:var(--module-head-text); font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:12px; font-weight:700; padding:6px 8px; border-top:2px solid var(--ink); }
+.rotc-lineup-table td, .rotc-lineup-table th{ white-space:nowrap; }
+
+/* Transactions Report Type column pills (transactions/transactions.php). */
+.rotc-txn-pill{ display:inline-block; padding:2px 10px; border-radius:999px; font-family:"Roboto Condensed", sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:var(--sand); color:var(--ink); }
+.rotc-pill-drop{ background:#fbe9e7; color:#b3261e; }
+.rotc-pill-add{ background:#e8f5e9; color:#1b5e20; }
+.rotc-pill-swap{ background:#fff3e0; color:#8a5a00; }
+.rotc-pill-trade{ background:#e3f2fd; color:#0d47a1; }
+
+/* League History records hub (history/index.php) -- sidebar + panel
+   layout instead of one long stack of cards. Sidebar lists every
+   category up front (nothing hidden below the fold) and uses the
+   horizontal space a single stretched column was wasting; JS toggles
+   which panel is visible, no page reload. */
+.rotc-history-layout{ display:flex; gap:20px; align-items:flex-start; }
+.rotc-history-nav{ flex:0 0 210px; position:sticky; top:16px; display:flex; flex-direction:column; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:10px; }
+.rotc-history-nav button{
+  display:block; width:100%; text-align:left; background:transparent; border:none;
+  font-family:"Roboto Condensed", sans-serif; font-weight:700; text-transform:uppercase;
+  letter-spacing:.04em; font-size:12.5px; color:var(--ink-2); padding:10px 12px;
+  border-radius:8px; cursor:pointer; transition:background .15s ease, color .15s ease;
+}
+.rotc-history-nav button:hover{ background:var(--sand); color:var(--ink); }
+.rotc-history-nav button.active{ background:var(--ink); color:var(--on-ink); }
+.rotc-history-content{ flex:1; min-width:0; }
+.rotc-history-panel{ }
+.rotc-history-panel h3{ margin-top:22px; }
+.rotc-history-panel h3:first-child{ margin-top:0; }
+.data-table tr.rotc-history-row-latest td{
+  background: linear-gradient(90deg, rgba(224,83,27,0.14), rgba(224,83,27,0.04));
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight:600;
+}
+.rotc-history-crown{ margin-right:2px; }
+
+/* ---- Head to Head ------------------------------------------- */
+.rotc-h2h-selector{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+.rotc-h2h-selector select{ padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; min-width:180px; }
+.rotc-h2h-selector-vs{ font-family:"Roboto Condensed", sans-serif; font-weight:700; text-transform:uppercase; color:var(--muted); font-size:13px; }
+
+.rotc-h2h-field-wrap{ margin:0 0 6px; }
+.rotc-h2h-field{ width:100%; height:auto; border-radius:10px; display:block; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+.rotc-h2h-field-labels{ display:flex; justify-content:space-between; margin-top:8px; }
+.rotc-h2h-field-label{ display:flex; flex-direction:column; font-size:13px; }
+.rotc-h2h-field-label strong{ font-size:15px; }
+.rotc-h2h-field-label span{ color:var(--muted); }
+.rotc-h2h-field-label-right{ align-items:flex-end; text-align:right; }
+.rotc-h2h-summary{ font-size:14px; color:var(--muted); margin:0 0 20px; }
+
+.rotc-h2h-series-wrap{ margin-bottom:20px; }
+.rotc-h2h-series{ width:100%; height:150px; display:block; }
+
+.rotc-h2h-rivalry-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:20px; }
+.rotc-h2h-rivalry-row{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 14px; border:1px solid var(--line); border-radius:8px;
+  background:var(--card); text-decoration:none; color:var(--ink);
+  transition:background .15s ease, border-color .15s ease;
+}
+.rotc-h2h-rivalry-row:hover{ background:var(--sand); border-color:var(--accent); }
+.rotc-h2h-rivalry-team{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; flex:1; min-width:0; }
+.rotc-h2h-rivalry-team:last-of-type{ justify-content:flex-end; text-align:right; }
+.rotc-h2h-mini-helmet{ width:24px; height:24px; border-radius:50%; object-fit:cover; background:var(--paper); border:1px solid var(--line); flex:none; }
+.rotc-h2h-rivalry-vs{ font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700; flex:none; }
+.rotc-h2h-rivalry-metric{ font-size:12px; color:var(--muted); flex:none; white-space:nowrap; margin-left:8px; }
+@media (max-width:600px){
+  .rotc-h2h-rivalry-row{ flex-wrap:wrap; }
+  .rotc-h2h-rivalry-metric{ width:100%; margin-left:0; }
+}
+@media (max-width:800px){
+  .rotc-history-layout{ flex-direction:column; }
+  .rotc-history-nav{ position:static; flex-direction:row; flex-wrap:wrap; }
+  .rotc-history-nav button{ width:auto; }
+}
+
+/* ---- Hall of Fame (history/hall-of-fame.php) -----------------
+   Gold accent scoped to THIS page only (.rotc-hof-page), never added to
+   the global :root palette in section 1 -- keeps it from bleeding into
+   any other page's styling. Helmets here are deliberately much larger
+   than the site's previous max (.rotc-recap-hero-helmet at 150px, see
+   section above): 260px for the reigning-champion spotlight, 180px for
+   every other champion in the trophy case. */
+.rotc-hof-page{ --hof-gold:#C9A227; --hof-gold-deep:#8C6D1F; }
+
+.rotc-hof-spotlight{ padding:0; }
+.rotc-hof-spotlight-media{
+  position:relative; height:320px; margin:0 0 60px;
+  background-size:cover; background-position:center 15%;
+}
+.rotc-hof-spotlight-media::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(to top, var(--card) 0%, rgba(0,0,0,0) 40%);
+}
+.rotc-hof-spotlight-helmet{
+  position:absolute; left:24px; bottom:-56px; z-index:1;
+  width:260px; height:260px; object-fit:contain;
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.35));
+}
+.rotc-hof-spotlight-body{ padding:0 24px 20px; }
+.rotc-hof-kicker{
+  font-family:"Roboto Condensed", sans-serif; text-transform:uppercase;
+  letter-spacing:.08em; font-size:13px; color:var(--hof-gold-deep);
+  font-weight:700; margin-bottom:6px;
+}
+.rotc-hof-trophy{ margin-right:2px; }
+.rotc-hof-spotlight-name{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:36px; line-height:1.1; margin:0 0 6px; color:var(--ink); }
+.rotc-hof-spotlight-final{ font-size:15px; color:var(--muted); margin-bottom:14px; }
+
+.rotc-hof-path{ display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; overflow-x:auto; }
+.rotc-hof-path-step{ display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:var(--paper); flex:0 0 auto; }
+.rotc-hof-path-step-final{ border-left:3px solid var(--hof-gold); }
+.rotc-hof-path-round{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:11px; color:var(--muted); font-weight:700; }
+.rotc-hof-path-score{ font-size:13px; color:var(--ink); white-space:nowrap; }
+
+.rotc-hof-case{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:18px; margin-top:8px; }
+.rotc-hof-case-item{
+  border:1px solid var(--line); border-radius:var(--radius); padding:16px;
+  text-align:center; border-top:3px solid var(--hof-gold);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.rotc-hof-case-item:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.12); }
+.rotc-hof-case-helmet{ width:180px; height:180px; object-fit:contain; display:block; margin:0 auto 10px; }
+.rotc-hof-case-year{ font-family:"Roboto Condensed", sans-serif; letter-spacing:.05em; font-size:13px; color:var(--hof-gold-deep); font-weight:700; }
+.rotc-hof-case-name{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:17px; margin:4px 0; color:var(--ink); }
+.rotc-hof-case-score{ font-size:13px; color:var(--muted); }
+
+@media (max-width:600px){
+  .rotc-hof-spotlight-media{ height:210px; margin-bottom:44px; }
+  .rotc-hof-spotlight-helmet{ width:170px; height:170px; left:16px; bottom:-40px; }
+  .rotc-hof-spotlight-body{ padding:0 16px 16px; }
+  .rotc-hof-spotlight-name{ font-size:26px; }
+  .rotc-hof-case-helmet{ width:130px; height:130px; }
+}
+
+/* ---- Top Games (scores/top-games.php) -------------------------
+   Bold "matchup poster/ticket" treatment per Matteo's reference (a
+   sports-championship-schedule graphic: big angled headline, dark
+   ticket-style matchup bars with large team badges flanking a VS
+   divider). Scoped to this page's own card -- the rest of the site
+   stays on its normal light .card styling; this is a deliberate,
+   contained exception, same way the Hall of Fame spotlight's dark
+   media banner is contained to its own component. */
+@media (min-width:900px){
+  /* Tightened off full-width -- reads better as a narrower, more
+     poster-like column on desktop. Left at 100% below 900px since 70%
+     of a phone-width viewport would be too cramped for the ticket rows. */
+  .rotc-topgames-main{ max-width:70%; margin:0 auto; }
+}
+.rotc-topgames-masthead{
+  font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-weight:700;
+  font-style:italic; font-size:36px; letter-spacing:.01em; text-align:center;
+  color:var(--ink); margin:10px 0 2px; transform:skew(-3deg);
+}
+.rotc-topgames-masthead span{ color:var(--accent); }
+.rotc-topgames-sub{ text-align:center; color:var(--muted); font-size:13px; margin:0 0 22px; }
+
+.rotc-topgames-list{ display:flex; flex-direction:column; gap:20px; }
+.rotc-topgames-item{ position:relative; background:var(--ink); border-radius:12px; overflow:hidden; padding-top:16px; }
+.rotc-topgames-rank{
+  position:absolute; top:-10px; left:14px; z-index:2;
+  width:40px; height:40px; border-radius:50%;
+  background:var(--accent); color:var(--on-ink); border:3px solid var(--ink);
+  display:flex; align-items:center; justify-content:center;
+  font-family:"Roboto Condensed", sans-serif; font-weight:700; font-size:18px;
+}
+.rotc-topgames-ticket{ display:flex; align-items:stretch; }
+/* Franchise "icon" art is a small (250x50) banner graphic with the team
+   name already baked in as text (confirmed live) -- set as this block's
+   own background (inline style, per-franchise, see scores/top-games.php)
+   and stretched to fully fill + crop into the angled parallelogram via
+   cover/center, rather than shown as a small contained logo. The
+   gradient below is only ever visible as a fallback for the rare
+   franchise with no icon set (paired with .rotc-topgames-name text). */
+.rotc-topgames-team{
+  flex:1 1 0; min-width:0; min-height:76px; display:flex; align-items:center; justify-content:center;
+  padding:16px 20px; background:linear-gradient(135deg, var(--accent), #a8390f);
+  background-size:cover; background-position:center;
+}
+.rotc-topgames-team-a{ justify-content:flex-end; text-align:right; clip-path:polygon(0 0,100% 0,90% 100%,0 100%); padding-right:30px; }
+.rotc-topgames-team-b{ justify-content:flex-start; text-align:left; clip-path:polygon(10% 0,100% 0,100% 100%,0 100%); padding-left:30px; margin-left:-16px; }
+.rotc-topgames-name{ font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-weight:700; font-size:16px; line-height:1.15; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.5); }
+.rotc-topgames-vs{
+  flex:0 0 auto; align-self:center; z-index:1; margin:0 -16px;
+  width:44px; height:44px; border-radius:50%; background:var(--ink); border:3px solid var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font-family:"Roboto Condensed", sans-serif; font-weight:700; font-size:13px; color:#fff;
+}
+.rotc-topgames-meta{
+  font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.08em;
+  font-size:11px; font-weight:700; color:var(--sand); background:rgba(0,0,0,.28);
+  padding:6px 20px; text-align:center;
+}
+.rotc-topgames-why{ font-size:13px; line-height:1.5; color:var(--sand); margin:0; padding:12px 20px 18px; }
+
+@media (max-width:520px){
+  .rotc-topgames-masthead{ font-size:26px; }
+  .rotc-topgames-team{ padding:10px; min-height:56px; }
+  .rotc-topgames-team-a, .rotc-topgames-team-b{ clip-path:none; margin:0; padding:10px; }
+  .rotc-topgames-name{ font-size:12px; }
+  .rotc-topgames-vs{ width:34px; height:34px; font-size:11px; margin:0 -6px; }
+}
+
+/* ---- Latest Transactions (templates/latest-transactions.php) -- */
+.rotc-latest-txns{ display:flex; flex-direction:column; margin-top:4px; }
+.rotc-latest-txn-row{ padding:9px 0; border-bottom:1px dashed var(--line); }
+.rotc-latest-txn-row:last-child{ border-bottom:0; }
+.rotc-latest-txn-top{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
+.rotc-latest-txn-franchise{ font-family:"Roboto Condensed", sans-serif; font-weight:700; font-size:12.5px; color:var(--ink); flex:1 1 auto; min-width:0; }
+.rotc-latest-txn-date{ font-size:11px; color:var(--muted); flex:0 0 auto; }
+.rotc-latest-txn-details{ font-size:12.5px; line-height:1.45; color:var(--ink-2); }
+.rotc-latest-txns-link{ display:inline-block; margin-top:12px; font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; font-size:12px; letter-spacing:.03em; font-weight:700; color:var(--accent); }
+
+/* ============================================================
+   MOBILE MANAGER HUB -- new for franchise/manage.php + the new
+   top-level "Manage" nav pill (see templates/header.php). Mocked-data
+   pass, see franchise/manage.php's own doc comment for what each card
+   would call once wired live.
+   ============================================================ */
+
+/* ---- 12. MANAGE NAV PILL -------------------------------------
+   Styled like the existing "Coach engaged" login pill (solid accent,
+   pill shape) rather than a plain uppercase nav label, so it reads as
+   the primary call-to-action in both the desktop bar and the mobile
+   burger menu -- this IS the "top level menu item" the mobile hub
+   needed. Placed first in the menu (see header.php) so it's the
+   first thing a thumb hits opening the burger on a phone. */
+/* Icon-only Manage link, sat next to the WhatsApp icon at the right of
+   the bar (same icon-link treatment as .rotc-whatsapp-link). */
+.rotc-manage-link{ display:flex; align-items:center; justify-content:center; padding:20px 4px; color:rgba(253,251,247,.82); }
+.rotc-manage-link:hover{ color:var(--accent); }
+.rotc-manage-link::after{ content:none !important; } /* not a dropdown -- suppress mobile "+" */
+@media (max-width:1100px){
+  /* In the stacked burger menu, show a label alongside the icon so the
+     row reads like the rest of the menu rather than a bare glyph. */
+  .rotc-manage-link{ justify-content:flex-start; padding:12px 4px; gap:10px; }
+  .rotc-manage-link::before{ content:"Manage"; font-family:"Roboto Condensed",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.08em; font-size:14px; order:2; }
+  .rotc-manage-link svg{ order:1; }
+}
+
+/* ---- 13. MANAGE HUB (franchise/manage.php) -------------------- */
+.rotc-manage-whoami{
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px; margin:4px 4px 16px;
+  background:var(--sand); border-radius:var(--radius);
+}
+.rotc-manage-whoami img{ width:38px; height:38px; border-radius:50%; object-fit:cover; background:var(--card); flex:none; }
+.rotc-manage-whoami-name{ font-family:"Roboto Condensed", sans-serif; font-weight:700; font-size:14px; color:var(--ink); }
+.rotc-manage-whoami-week{ font-size:12px; color:var(--muted); }
+
+.rotc-manage-grid{ display:grid; grid-template-columns:1fr; gap:12px; padding:0 4px; }
+@media (min-width:640px){ .rotc-manage-grid{ grid-template-columns:1fr 1fr; } }
+
+.rotc-manage-card{
+  display:flex; align-items:center; gap:14px;
+  background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px; text-decoration:none; color:var(--ink);
+  box-shadow:0 1px 2px rgba(42,24,16,.05);
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  min-height:72px;
+}
+@media (hover:hover){
+  .rotc-manage-card:hover{ border-color:var(--accent); box-shadow:0 6px 16px rgba(42,24,16,.10); transform:translateY(-1px); color:var(--ink); }
+}
+.rotc-manage-card:active{ transform:scale(.98); }
+
+.rotc-manage-card-icon{
+  flex:0 0 auto; width:46px; height:46px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--sand); color:var(--accent);
+}
+.rotc-manage-card-icon svg{ width:24px; height:24px; }
+
+.rotc-manage-card-body{ flex:1 1 auto; min-width:0; }
+.rotc-manage-card-title{ display:flex; align-items:center; font-family:"Roboto Condensed", sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:14.5px; margin:0 0 3px; }
+.rotc-manage-card-status{ font-size:12.5px; color:var(--muted); margin:0; line-height:1.4; }
+.rotc-manage-card-status.is-due{ color:var(--accent); font-weight:600; }
+.rotc-manage-card-status.is-done{ color:#1b5e20; font-weight:600; }
+
+.rotc-manage-card-chevron{ flex:0 0 auto; color:var(--muted); }
+.rotc-manage-card:hover .rotc-manage-card-chevron{ color:var(--accent); }
+
+.rotc-manage-badge{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:19px; height:19px; padding:0 6px; margin-left:7px; border-radius:999px;
+  background:var(--accent); color:var(--on-ink); font-size:10.5px; font-weight:700;
+}
+
+.rotc-manage-footnote{ font-size:12px; color:var(--muted); text-align:center; margin:18px 4px 4px; }
+
+@media (max-width:480px){
+  .rotc-manage-card{ padding:14px; gap:12px; min-height:64px; }
+  .rotc-manage-card-icon{ width:42px; height:42px; }
+  .rotc-manage-card-icon svg{ width:21px; height:21px; }
+}
+
+/* ---- 14. TASK-PAGE MOBILE HARDENING ----------------------------
+   The 4 existing franchise write-action pages (submit-lineup,
+   drop-player, offer-trade, pool-pick) already inherit the responsive
+   shell above (single-column .home-grid, collapsing nav) -- they don't
+   need to be forked into separate mobile pages. What they DID need:
+   bigger tap targets, and fewer columns competing for a phone's width.
+   This is a CSS-only pass; the only markup touched on those pages is
+   one added id (#rotc-lineup-table-main on submit-lineup.php) so its
+   column-hide rule can't also match drop-player.php's table, which
+   reuses the same .rotc-lineup-table class for different columns. */
+@media (max-width:680px){
+  /* Submit Lineup: keep Start / logo / Player / Pos / Opp / Inj / Proj Pts.
+     Hide Bye, Pos Rank, % Start -- informational extras, not needed to act. */
+  #rotc-lineup-table-main th:nth-child(7), #rotc-lineup-table-main td:nth-child(7),
+  #rotc-lineup-table-main th:nth-child(9), #rotc-lineup-table-main td:nth-child(9),
+  #rotc-lineup-table-main th:nth-child(10), #rotc-lineup-table-main td:nth-child(10){
+    display:none;
+  }
+  /* Drop a Player: keep Drop / logo / Player / Pos / Inj / YTD Pts.
+     Hide Acquired and prior-year Pts. */
+  #rotc-drop-table th:nth-child(5), #rotc-drop-table td:nth-child(5),
+  #rotc-drop-table th:nth-child(8), #rotc-drop-table td:nth-child(8){
+    display:none;
+  }
+}
+
+/* Bigger tap targets everywhere a franchise write-action form asks for
+   a checkbox/radio tap -- default browser size (~13px) is a mis-tap
+   magnet on a phone. Applies to every checkbox table across these
+   pages plus the NFL Pool pick radios. */
+.rotc-lineup-table input[type="checkbox"],
+.rotc-roster-table input[type="checkbox"],
+.rotc-pool-matchup input[type="radio"]{
+  width:22px; height:22px; accent-color:var(--accent); cursor:pointer;
+}
+.rotc-pool-matchup{ flex-wrap:wrap; row-gap:8px; }
+.rotc-pool-matchup label{ padding:6px 10px; border:1px solid var(--line); border-radius:999px; cursor:pointer; }
+.rotc-pool-matchup label:has(input:checked){ background:var(--sand); border-color:var(--accent); font-weight:700; }
+@media (max-width:480px){
+  .rotc-pool-matchup span{ flex-basis:100%; }
+}
+
+@media (max-width:680px){
+  .rotc-inline-form{ flex-wrap:wrap; }
+  .rotc-inline-form select{ flex:1 1 auto; padding:10px 12px; font-size:14px; }
+  .rotc-btn{ width:100%; text-align:center; padding:13px 18px; font-size:15px; }
+  /* Sticky submit -- the primary write action stays reachable with one
+     thumb no matter how long the roster/matchup list scrolls. */
+  .rotc-lineup-form > .rotc-btn{
+    position:sticky; bottom:10px;
+    box-shadow:0 4px 14px rgba(42,24,16,.28);
+  }
+}
+
+/* Highlights the viewer's own matchup row on franchise/rotc-pickem.php --
+   same left-accent-stripe treatment as .data-table's .my-franchise row. */
+.rotc-pool-matchup-mine{ background:var(--sand); box-shadow:inset 3px 0 0 var(--accent); padding-left:8px; border-radius:6px; }
+/* ---- TRADE MARKET (history/index.php "Trade Market" panel) ----
+   Stat tiles, inline-SVG charts and caveat notes for the trade offer
+   history in includes/trade-offers.php. Chart colours are deliberately
+   OUTSIDE the :root palette above -- they encode five fixed outcome
+   categories (accepted/rejected/revoked/expired) that need to stay
+   distinguishable from each other, not harmonise with the site accent. */
+.rotc-to-stats{
+  display:flex; flex-wrap:wrap; gap:10px; margin:4px 0 18px;
+}
+.rotc-to-stat{
+  flex:1 1 130px; background:var(--paper); border:1px solid var(--line);
+  border-radius:var(--radius); padding:12px 14px;
+}
+.rotc-to-stat strong{
+  display:block; font-family:"Roboto Condensed", sans-serif;
+  font-size:24px; line-height:1.1; color:var(--accent);
+}
+.rotc-to-stat span{
+  display:block; margin-top:3px; font-size:12px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.03em;
+}
+.rotc-to-note{
+  font-size:12.5px; line-height:1.5; color:var(--muted); margin:6px 0 14px;
+}
+/* Charts scale with the panel; the viewBox does the layout work so the
+   SVG never needs a fixed pixel width on small screens. */
+.rotc-to-chart{
+  display:block; width:100%; height:auto; max-width:640px; margin:6px 0 16px;
+}
+.rotc-to-axis{
+  font-family:"Roboto Condensed", sans-serif; font-size:11px; fill:var(--ink-2);
+}
+
+/* ---- FRONT-PAGE ON-THE-CLOCK MODULE --------------
+   NOT CURRENTLY RENDERED. index.php shows the auction status strip in
+   this slot now (see the end of this file); the draft module's markup
+   was removed from the front page when the league moved to the auction.
+   Kept because the state builder behind it (includes/draft-board.php)
+   still exists and this is the styling it needs if the module ever comes
+   back next preseason. .rotc-onclock-secondary IS still live -- the
+   auction strip reuses it for its Results button.
+
+   Originally: replaced the Draft Day announcement once the draft was
+   underway.
+
+   The banner is a horizontal gradient, not a flat dark fill: the helmet
+   art is a white-background PNG, so it needs a light panel to sit on.
+   The gradient runs cream -> ink across the first ~200px, letting that
+   white plate blend into the dark banner instead of reading as a
+   pasted-on cut-out. Text sits well right of the transition.
+
+   Sized to roughly half the original height -- this is a status strip
+   above the hero carousel, not a hero itself, so the last-picks row runs
+   horizontally rather than stacking. */
+.rotc-onclock{
+  display:flex; flex-wrap:wrap; align-items:center; gap:12px;
+  background:linear-gradient(100deg,
+    #FDFBF7 0px, #FDFBF7 78px, var(--ink) 190px, var(--ink) 100%);
+  color:var(--on-ink);
+  border-radius:var(--radius); padding:9px 16px; margin-bottom:14px;
+  /* Outlined so the module reads as a deliberate component. The border is
+     ink-tinted rather than a light hairline because the half that needs
+     definition is the cream end, which would otherwise dissolve into the
+     cream page background; against the dark end it simply recedes. */
+  border:1px solid rgba(42,24,16,.28);
+  box-shadow:0 1px 3px rgba(42,24,16,.10);
+}
+.rotc-onclock-helmet-wrap{
+  flex:none; display:flex; align-items:center; justify-content:center;
+  width:58px; height:44px;
+}
+.rotc-onclock-helmet{ width:100%; height:auto; mix-blend-mode:multiply; }
+.rotc-onclock-helmet.flip{ transform:scaleX(-1); }
+.rotc-onclock-main{ flex:1 1 190px; min-width:0; }
+.rotc-onclock-eyebrow{
+  margin:0; font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.08em; font-size:10px; font-weight:700; color:var(--accent);
+}
+.rotc-onclock-team{
+  margin:0; font-family:"Roboto Condensed",sans-serif; font-size:19px;
+  line-height:1.15; font-weight:700;
+}
+.rotc-onclock-meta{ margin:0; font-size:11.5px; color:rgba(253,251,247,.8); }
+.rotc-onclock-dim{ opacity:.6; }
+/* Tabular digits so the clock doesn't jitter as it ticks. */
+.rotc-onclock-timer{ flex:none; text-align:center; }
+.rotc-onclock-timer .t{
+  display:block; font-family:"Roboto Condensed",sans-serif; font-size:21px;
+  font-weight:700; font-variant-numeric:tabular-nums; color:var(--accent);
+  line-height:1.1;
+}
+.rotc-onclock-timer .l{
+  display:block; font-size:9px; text-transform:uppercase; letter-spacing:.06em;
+  color:rgba(253,251,247,.55);
+}
+/* Last picks: one horizontal row, smaller than the on-clock team --
+   supporting detail that must not compete with the headline. */
+.rotc-onclock-recent{
+  flex:1 1 100%; display:flex; align-items:center; flex-wrap:wrap; gap:14px;
+  border-top:1px solid rgba(253,251,247,.14); padding-top:6px; margin-top:1px;
+}
+.rotc-onclock-recent-label{
+  margin:0; font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.06em; font-size:9.5px; font-weight:700;
+  color:rgba(253,251,247,.5); flex:none;
+}
+.rotc-onclock-pick{ display:flex; align-items:center; gap:7px; }
+.rotc-onclock-photo{
+  width:26px; height:20px; object-fit:cover; object-position:top center;
+  border-radius:3px; background:rgba(253,251,247,.08); flex:none;
+}
+.rotc-onclock-pick-text{ font-size:11.5px; line-height:1.25; min-width:0; }
+.rotc-onclock-pick-text strong{ font-weight:700; }
+.rotc-onclock-to{ color:rgba(253,251,247,.5); margin-left:3px; }
+.rotc-onclock-actions{ display:flex; align-items:center; gap:8px; flex:none; }
+.rotc-onclock-actions .rotc-draft-cta{ padding:7px 14px; font-size:12px; }
+.rotc-onclock-secondary{
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.06em; font-weight:700; font-size:11px; color:rgba(253,251,247,.8);
+  text-decoration:none; border:1px solid rgba(253,251,247,.28);
+  border-radius:8px; padding:7px 12px; white-space:nowrap;
+}
+@media (max-width:720px){
+  /* Stacked, so the cream panel reads as a band across the top instead
+     of a vertical stripe behind centred text. */
+  .rotc-onclock{
+    background:linear-gradient(170deg,
+      #FDFBF7 0px, #FDFBF7 40px, var(--ink) 96px, var(--ink) 100%);
+    padding-top:6px;
+  }
+  .rotc-onclock-team{ font-size:17px; }
+  .rotc-onclock-actions{ flex:1 1 100%; }
+  .rotc-onclock-actions .rotc-draft-cta{ flex:1; text-align:center; }
+}
+
+
+/* ---- FRONT-PAGE AUCTION STATUS STRIP (index.php) --------------
+   Replaced the on-the-clock draft module in the same slot, and
+   deliberately reuses its shell: same dark bar, same height, same
+   .rotc-draft-cta / .rotc-onclock-secondary buttons, so the front page
+   didn't change shape when the league moved from draft to auction. No
+   helmet plate here, though, so this one is a flat ink fill rather than
+   the cream->ink gradient the draft module needed.
+
+   Four pills, one line, tight: active auctions, dollars bid on them,
+   auctions closed, dollars spent. */
+.rotc-auction-strip{
+  display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px;
+  background:var(--ink); color:var(--on-ink);
+  border-radius:var(--radius); padding:10px 16px; margin-bottom:14px;
+  border:1px solid rgba(42,24,16,.28);
+  box-shadow:0 1px 3px rgba(42,24,16,.10);
+}
+.rotc-auction-strip-head{ flex:0 1 auto; min-width:0; }
+.rotc-auction-eyebrow{
+  margin:0; font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.08em; font-size:10px; font-weight:700; color:var(--accent);
+}
+.rotc-auction-title{
+  margin:0; font-family:"Roboto Condensed",sans-serif; font-size:19px;
+  line-height:1.15; font-weight:700; white-space:nowrap;
+}
+.rotc-auction-pills{ display:flex; flex-wrap:wrap; gap:8px; flex:1 1 auto; }
+.rotc-auction-pill{
+  display:inline-flex; align-items:baseline; gap:5px;
+  padding:4px 12px; border-radius:999px;
+  background:rgba(253,251,247,.08); border:1px solid rgba(253,251,247,.18);
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.05em; font-size:10.5px; font-weight:700;
+  color:rgba(253,251,247,.62); white-space:nowrap;
+}
+/* Tabular digits so a pill doesn't jump width as a bid ticks up. */
+.rotc-auction-pill b{
+  font-size:16px; font-weight:700; letter-spacing:0; color:var(--on-ink);
+  font-variant-numeric:tabular-nums;
+}
+/* Live bidding is the one number worth shouting about. */
+.rotc-auction-pill.hot{ background:rgba(224,83,27,.18); border-color:var(--accent); }
+.rotc-auction-pill.hot b{ color:var(--accent); }
+/* Next hard deadline, under the strip's headline. Auctions stop 24h
+   after their opening bid, so this is a real countdown, not an estimate.
+   Goes red inside the last 10% -- the same point MFL flags a row. */
+.rotc-auction-closes{
+  margin:1px 0 0; font-size:11.5px; color:rgba(253,251,247,.7);
+  font-variant-numeric:tabular-nums;
+}
+.rotc-auction-closes.closing{ color:var(--accent); font-weight:700; }
+.rotc-auction-actions{ display:flex; align-items:center; gap:8px; flex:none; }
+.rotc-auction-actions .rotc-draft-cta{ padding:7px 14px; font-size:12px; }
+@media (max-width:720px){
+  .rotc-auction-title{ font-size:17px; white-space:normal; }
+  .rotc-auction-actions{ flex:1 1 100%; }
+  .rotc-auction-actions .rotc-draft-cta{ flex:1; text-align:center; }
+}
+
+/* ---- AUCTION BID PAGE (draft-auction/auction-bid.php) ----------
+   Budget/roster panel above the player finder. Card-on-card, so it sits
+   on --sand rather than --card to separate from the enclosing .card. */
+.rotc-auction-status{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px; margin:0 0 16px;
+}
+.rotc-auction-stat{
+  background:var(--sand); border:1px solid var(--line); border-radius:var(--radius);
+  padding:9px 12px;
+}
+.rotc-auction-stat .l{
+  display:block; font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.05em; font-size:10px; font-weight:700; color:var(--muted);
+}
+.rotc-auction-stat .v{
+  display:block; font-family:"Roboto Condensed",sans-serif; font-size:19px;
+  font-weight:700; font-variant-numeric:tabular-nums;
+}
+.rotc-auction-stat.warn .v{ color:#b3261e; }
+/* Player finder: filter row above the sortable results table. */
+.rotc-auction-filters{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+.rotc-auction-filters input[type="search"],
+.rotc-auction-filters select{
+  padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:13px;
+}
+.rotc-auction-filters input[type="search"]{ flex:1 1 220px; min-width:0; }
+.rotc-auction-count{ font-size:12px; color:var(--muted); margin-left:auto; }
+/* The nomination bar sticks to the bottom of the finder so the opening
+   bid and the submit button stay reachable however far the owner has
+   scrolled through free agents. */
+.rotc-auction-nominate{
+  position:sticky; bottom:0; z-index:2;
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+  background:var(--card); border-top:2px solid var(--ink);
+  padding:12px 2px; margin-top:4px;
+}
+.rotc-auction-nominate .pick{ font-size:13px; flex:1 1 200px; min-width:0; }
+.rotc-auction-nominate .pick b{ font-family:"Roboto Condensed",sans-serif; font-size:15px; }
+.rotc-auction-nominate label{
+  font-family:"Roboto Condensed",sans-serif; text-transform:uppercase;
+  letter-spacing:.04em; font-size:11px; font-weight:700; color:var(--muted);
+}
+.rotc-auction-nominate input[type="text"]{
+  width:90px; padding:7px 9px; border:1px solid var(--line); border-radius:8px;
+  font-size:14px; font-variant-numeric:tabular-nums;
+}
+.rotc-auction-hint{ font-size:12px; color:var(--muted); margin:6px 0 0; }
+/* Time Left cell in the open-auctions table. Tabular digits so the
+   column doesn't jitter as the countdown ticks over. */
+.rotc-auction-left{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+.rotc-auction-left.closing{ color:#b3261e; font-weight:700; }
+@media (max-width:720px){
+  .rotc-auction-nominate .rotc-btn{ width:auto; }
+}
+
+
+/* ---- INJURY STATUS TAGS ------------------------------------
+   The short code MFL prints after a player's name -- (Q), (O), (IR).
+   Rendered by rotc_injury_tag() in includes/player-hover.php, which
+   rotc_player_hover_span() appends automatically, so these appear
+   anywhere the site lists players.
+
+   Three colours, by what the status means for game day rather than one
+   per MFL string: red = not playing, amber = might not play, grey =
+   not a fantasy asset right now (retired/suspended/holdout). Grey
+   matters -- a retired player marked in red would read as an urgent
+   game-day problem, which it isn't.
+
+   Small and unbold-able: this rides directly after a name inside table
+   cells and feed rows, so it has to read as an annotation, never as
+   part of the name. */
+.rotc-inj{
+  font-family:"Roboto Condensed", sans-serif;
+  font-size:11px; font-weight:700; letter-spacing:.02em;
+  white-space:nowrap; cursor:help; vertical-align:baseline;
+}
+.rotc-inj-out{  color:#b3261e; }
+.rotc-inj-warn{ color:#8a5a00; }
+.rotc-inj-gone{ color:#8A7A6C; }

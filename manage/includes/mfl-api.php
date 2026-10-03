@@ -1,0 +1,504 @@
+<?php
+/**
+ * includes/mfl-api.php
+ * Shared MFL API fetch + file-cache helpers, pulled out of
+ * api/matchup-ticker.php so standings.php, gameday.php, and anything
+ * else that needs MFL data can reuse the same fetch/cache logic
+ * instead of each re-implementing it.
+ *
+ * Requires config.php to already be loaded (MFL_LEAGUE_ID, MFL_YEAR,
+ * MFL_API_KEY, MFL_USER_AGENT constants) — see api/matchup-ticker.php
+ * for the standard config-loading pattern every entry point uses.
+ *
+ * Cache TTLs are chosen per call site, not hardcoded here — a
+ * standings page might cache leagueStandings for 5 minutes, while
+ * liveScoring on gameday wants a much shorter TTL.
+ */
+
+function mfl_cached_get(string $type, int $ttlSeconds, array $params = [], bool $includeLeague = true, ?callable $isValid = null): ?array {
+    return mfl_cached_get_year($type, (int) MFL_YEAR, $ttlSeconds, $params, $includeLeague, $isValid);
+}
+
+/**
+ * Same as mfl_cached_get() but against an explicit year rather than the
+ * current MFL_YEAR -- needed for things like a free agent's 2025 total
+ * points shown on a 2026 page. Year is part of the cache key so a
+ * prior-year lookup never collides with the current season's entry.
+ */
+/**
+ * $isValid (optional) is a caller-supplied sanity check on a FRESH
+ * response, and exists because "no error key" does not mean "usable
+ * data". Confirmed live 2026-09-05: an unauthorised TYPE=pool request
+ * returns a perfectly well-formed payload -- every franchise node
+ * present, week node present -- with the `game` arrays simply missing,
+ * and no `error` key anywhere. mfl_fetch() therefore accepted it and
+ * this function cached it, silently replacing a good copy with "you
+ * have no picks" and rendering an owner's submitted pick sheet as
+ * blank. When $isValid rejects a response it is neither returned nor
+ * cached, and the stale copy is served instead -- the same fallback a
+ * transport failure already gets.
+ */
+function mfl_cached_get_year(string $type, int $year, int $ttlSeconds, array $params = [], bool $includeLeague = true, ?callable $isValid = null): ?array {
+    $cacheDir = sys_get_temp_dir() . '/rotc-mfl-cache';
+    if (!is_dir($cacheDir)) @mkdir($cacheDir, 0700, true);
+    // Params affect the response shape (e.g. POOLTYPE, W, ALL) so they
+    // need to be part of the cache key, not just the request type.
+    $cacheKey = $type . '-' . MFL_LEAGUE_ID . '-' . $year . '-' . ($includeLeague ? 'L' : 'noL') . '-' . md5(serialize($params));
+    $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
+
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $ttlSeconds) {
+        $cached = json_decode(file_get_contents($cacheFile), true);
+        if (is_array($cached)) return $cached;
+    }
+
+    $data = mfl_fetch($type, $params, $includeLeague, $year);
+    if ($data !== null && $isValid !== null && !$isValid($data)) {
+        // Well-formed but not trustworthy -- see the note above. Treat it
+        // exactly like a failed fetch rather than letting it overwrite
+        // good data.
+        $data = null;
+    }
+    if ($data !== null) {
+        @file_put_contents($cacheFile, json_encode($data));
+    } elseif (file_exists($cacheFile)) {
+        // MFL call failed but we have a stale copy -- serve it rather than nothing.
+        $stale = json_decode(file_get_contents($cacheFile), true);
+        if (is_array($stale)) return $stale;
+    }
+    return $data;
+}
+
+/**
+ * $includeLeague controls whether 'L' (league id) is sent at all.
+ * Most types need it (league, leagueStandings, rosters, freeAgents,
+ * pool, survivorPool, ...). A handful of NFL-wide / player-database
+ * types (injuries, players, playerRanks, adp, aav, topAdds, topDrops,
+ * topStarters, topOwns, nflSchedule, nflByeWeeks, allRules,
+ * playerProfile) are NOT league-scoped per MFL's own API docs, and
+ * confirmed live: sending L on those makes api.myfantasyleague.com
+ * redirect to the league's wwwXX host, which then rejects the request
+ * ("must go to api.myfantasyleague.com") — a dead loop that comes back
+ * as an {"error":...} payload instead of data. Pass false for those.
+ */
+function mfl_fetch(string $type, array $params = [], bool $includeLeague = true, ?int $year = null): ?array {
+    $base = ['TYPE' => $type, 'JSON' => 1, 'APIKEY' => MFL_API_KEY];
+    if ($includeLeague) $base['L'] = MFL_LEAGUE_ID;
+    $query = http_build_query(array_merge($base, $params));
+    // Always hit the generic api host and follow MFL's redirect to the
+    // league's actual host -- see the config.php note on why we don't
+    // hardcode a wwwXX server.
+    $url = 'https://api.myfantasyleague.com/' . ($year ?? MFL_YEAR) . '/export?' . $query;
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_USERAGENT      => MFL_USER_AGENT,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 3,
+    ]);
+    $body = curl_exec($ch);
+    $ok = $body !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200;
+    curl_close($ch);
+    if (!$ok) return null;
+
+    $data = json_decode($body, true);
+    if (!is_array($data) || isset($data['error'])) return null;
+    return $data;
+}
+
+/* ---- INJURY STATUS ------------------------------------------
+ * Lives here, in the data layer, rather than next to the rendering
+ * helper: the live-scoring feed (api/live-wire.php) needs the status
+ * without loading any of the player-name/photo rendering code, and
+ * every entry point already requires this file. The matching display
+ * helper is rotc_injury_tag() in includes/player-hover.php.
+ *
+ * Source is TYPE=injuries (league-agnostic, no L param). Confirmed
+ * live 2026-09-01, week 1: 445 rows, and the statuses MFL actually
+ * emits are Questionable, IR, IR-R, IR-PUP, IR-NFI, Out, Suspended,
+ * RETIRED and Holdout -- NOT the tidy Q/D/O set you'd expect, which is
+ * why the map below matches real strings and falls back rather than
+ * assuming. Each row also carries `details` ("Hamstring") and
+ * `exp_return` ("Sep 13, 2026").
+ */
+
+/**
+ * [playerId => ['status'=>, 'details'=>, 'exp_return'=>]], cached for
+ * the request AND on disk (30 min, same TTL the injury report uses).
+ * Static so a page listing 200 players costs one fetch, not 200.
+ */
+function rotc_injury_map(): array {
+    static $map = null;
+    if ($map !== null) return $map;
+    $map = [];
+    if (!function_exists('mfl_cached_get')) return $map;
+    $raw = mfl_cached_get('injuries', 1800, [], false);
+    foreach (mfl_normalize_list($raw['injuries']['injury'] ?? null) as $inj) {
+        if (empty($inj['id'])) continue;
+        $map[(string) $inj['id']] = [
+            'status'     => (string) ($inj['status'] ?? ''),
+            'details'    => (string) ($inj['details'] ?? ''),
+            'exp_return' => (string) ($inj['exp_return'] ?? ''),
+        ];
+    }
+    return $map;
+}
+
+/**
+ * Status string -> ['abbr' => 'IR', 'key' => 'ir'] for display.
+ * 'key' drives the colour class (see .rotc-inj-* in mfl26.css):
+ *   out  = red      -- not playing (Out, IR and its variants)
+ *   warn = amber    -- might not play (Questionable, Doubtful)
+ *   gone = grey     -- not a fantasy asset right now (Retired,
+ *                      Suspended, Holdout) -- no game-day meaning, so
+ *                      it must not read as urgent the way red does.
+ * Anything unrecognised still gets a tag (first two letters, grey)
+ * rather than vanishing -- MFL has added statuses before.
+ */
+function rotc_injury_badge(string $status): ?array {
+    $s = strtoupper(trim($status));
+    if ($s === '') return null;
+    if ($s === 'QUESTIONABLE')        return ['abbr' => 'Q',   'key' => 'warn'];
+    if ($s === 'DOUBTFUL')            return ['abbr' => 'D',   'key' => 'warn'];
+    if ($s === 'PROBABLE')            return ['abbr' => 'P',   'key' => 'warn'];
+    if ($s === 'OUT')                 return ['abbr' => 'O',   'key' => 'out'];
+    if (strpos($s, 'IR') === 0)       return ['abbr' => 'IR',  'key' => 'out'];
+    if ($s === 'PUP')                 return ['abbr' => 'PUP', 'key' => 'out'];
+    if ($s === 'SUSPENDED')           return ['abbr' => 'SUS', 'key' => 'gone'];
+    if ($s === 'RETIRED')             return ['abbr' => 'RET', 'key' => 'gone'];
+    if ($s === 'HOLDOUT')             return ['abbr' => 'HO',  'key' => 'gone'];
+    return ['abbr' => substr($s, 0, 2), 'key' => 'gone'];
+}
+
+/**
+ * MFL collapses single-result lists to a bare associative array instead
+ * of a one-item list (confirmed live: TYPE=players with one match
+ * returns "player":{...} not "player":[{...}]). Every place that reads
+ * a *[] list from the API needs to run it through this first, or a
+ * result set of exactly one silently breaks a plain foreach.
+ */
+/**
+ * Set of currently-available (unrostered) player ids in THIS league, via
+ * TYPE=freeAgents -> freeAgents.leagueUnit.player[] (same source
+ * players/free-agents.php uses). Returned as [playerId => true] so any
+ * player-value page can filter its list to "free agents only" with an
+ * isset() check. Cached 15 min -- add/drop activity changes it.
+ */
+function rotc_free_agent_ids(): array {
+    $raw = mfl_cached_get('freeAgents', 900);
+    $ids = [];
+    foreach (mfl_normalize_list($raw['freeAgents']['leagueUnit']['player'] ?? null) as $p) {
+        if (!empty($p['id'])) $ids[(string) $p['id']] = true;
+    }
+    return $ids;
+}
+
+/**
+ * Player ids currently STARTING for a franchise in a given week, read
+ * back from a submitted lineup via TYPE=weeklyResults
+ * (matchup.franchise.player[].status == "starter"). Returned as
+ * [playerId => true] for pre-checking the lineup form; empty array when
+ * nothing is submitted yet or the read fails -- callers then fall back to
+ * the old "everything unchecked" behavior rather than guessing.
+ *
+ * NOTE: whether weeklyResults returns a lineup for an UPCOMING week
+ * (before kickoff) is not confirmed live -- pages expose a ?debug dump so
+ * this can be verified against real submitted lineups.
+ */
+function rotc_current_starter_ids(string $franchiseId, $week): array {
+    if ($franchiseId === '') return [];
+    $raw = mfl_cached_get('weeklyResults', 120, ['W' => $week]);
+    $out = [];
+    foreach (mfl_normalize_list($raw['weeklyResults']['matchup'] ?? null) as $m) {
+        foreach (mfl_normalize_list($m['franchise'] ?? null) as $fr) {
+            if ((string) ($fr['id'] ?? '') !== $franchiseId) continue;
+            foreach (mfl_normalize_list($fr['player'] ?? null) as $p) {
+                if (!empty($p['id']) && strtolower((string) ($p['status'] ?? '')) === 'starter') {
+                    $out[(string) $p['id']] = true;
+                }
+            }
+        }
+    }
+    return $out;
+}
+
+/**
+ * The set of winner ids a franchise has already picked for a given week
+ * in the NFL or Fantasy pool, read back via TYPE=pool
+ * (poolPicks.franchise[].week[]). Returned as [winnerId => true] so a
+ * pick form can pre-select the matching radio (its value is the winner's
+ * team code / franchise id). Empty when nothing is submitted or the read
+ * fails.
+ *
+ * The exact per-game shape inside a week row is NOT confirmed live (no
+ * picks existed when this league's pool code was first written), so this
+ * scans the week row defensively for any pick-like values rather than
+ * assuming one layout. Pages expose a ?debug dump to confirm it.
+ */
+/**
+ * TYPE=pool for one pool type, refusing to cache the picks-stripped
+ * shape an unauthorised request returns (see mfl_cached_get_year()).
+ * Every pool read goes through here so the guard can't be forgotten at
+ * one call site.
+ */
+function rotc_fetch_pool(string $poolType, int $ttlSeconds = 120): ?array {
+    return mfl_cached_get('pool', $ttlSeconds, ['POOLTYPE' => $poolType], true, function ($data) {
+        foreach (mfl_normalize_list($data['poolPicks']['franchise'] ?? null) as $fr) {
+            foreach (mfl_normalize_list($fr['week'] ?? null) as $w) {
+                if (!empty($w['game'])) return true;   // real picks present
+            }
+        }
+        // Nobody in the league has picked yet is a legitimate empty, and
+        // indistinguishable from the unauthorised shape -- so an empty
+        // franchise list is accepted and a populated-but-gameless one is
+        // not. That's the only difference the payload actually carries.
+        return !mfl_normalize_list($data['poolPicks']['franchise'] ?? null);
+    });
+}
+
+function rotc_current_pool_pick_ids(string $franchiseId, string $poolType, $week): array {
+    if ($franchiseId === '') return [];
+    $raw = rotc_fetch_pool($poolType);
+    $out = [];
+    foreach (mfl_normalize_list($raw['poolPicks']['franchise'] ?? null) as $fr) {
+        if ((string) ($fr['id'] ?? '') !== $franchiseId) continue;
+        foreach (mfl_normalize_list($fr['week'] ?? null) as $wRow) {
+            // Only skip on a week that is present AND different. MFL has
+            // been seen omitting the attribute on the week node; treating
+            // absent as "not my week" threw away real picks.
+            if (isset($wRow['week']) && (int) $wRow['week'] !== (int) $week) continue;
+            rotc_collect_pool_pick_values($wRow, $out);
+        }
+    }
+    return $out;
+}
+
+/** Recursively harvest 'pick' values from a pool week row (shape-agnostic). */
+function rotc_collect_pool_pick_values($node, array &$out): void {
+    if (!is_array($node)) return;
+    foreach ($node as $k => $v) {
+        if ($k === 'pick' && is_scalar($v) && (string) $v !== '') {
+            $val = (string) $v;
+            $out[$val] = true;
+            // An all-digits pick is a FRANCHISE id (the Fantasy pool picks
+            // franchises; the NFL pool picks team codes like "SEA", which
+            // this leaves alone). MFL is not consistent about zero-padding
+            // those to four digits between endpoints, and the caller
+            // compares against ids that ARE padded -- so "1" would never
+            // match "0001" and the pick would silently render unselected.
+            // Storing both spellings makes the lookup immune either way.
+            if (ctype_digit($val)) {
+                $out[str_pad($val, 4, '0', STR_PAD_LEFT)] = true;
+                $out[ltrim($val, '0') !== '' ? ltrim($val, '0') : '0'] = true;
+            }
+        } elseif (is_array($v)) {
+            rotc_collect_pool_pick_values($v, $out);
+        }
+    }
+}
+
+function mfl_normalize_list($val): array {
+    if ($val === null) return [];
+    if (!is_array($val)) return [];
+    $isAssoc = array_keys($val) !== range(0, count($val) - 1);
+    return $isAssoc ? [$val] : $val;
+}
+
+/**
+ * Shared franchise lookup: id => ['name'=>, 'icon'=>, 'abbrev'=>,
+ * 'division'=>], keyed by MFL franchise id. Icon is the small helmet
+ * graphic (MFL's 'icon' field) — use this over 'logo' (the big banner)
+ * for team icons in tables per Matteo's call.
+ */
+function mfl_franchises(): array {
+    $league = mfl_cached_get('league', 86400);
+    $out = [];
+    foreach (mfl_normalize_list($league['league']['franchises']['franchise'] ?? null) as $f) {
+        $out[$f['id']] = [
+            'name'     => trim($f['name']),
+            'icon'     => $f['icon'] ?? '',
+            'abbrev'   => $f['abbrev'] ?? $f['id'],
+            'division' => $f['division'] ?? '',
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Division id => ['name'=>, 'conference'=>], and conference id => name,
+ * from the same league export. Used to group standings the way MFL's
+ * own standings report does (conference -> division -> franchises).
+ */
+function mfl_divisions_conferences(): array {
+    $league = mfl_cached_get('league', 86400);
+    $conferences = [];
+    foreach (mfl_normalize_list($league['league']['conferences']['conference'] ?? null) as $c) {
+        $conferences[$c['id']] = $c['name'];
+    }
+    $divisions = [];
+    foreach (mfl_normalize_list($league['league']['divisions']['division'] ?? null) as $d) {
+        $divisions[$d['id']] = [
+            'name'           => $d['name'],
+            'conference'     => $d['conference'],
+            'conferenceName' => $conferences[$d['conference']] ?? $d['conference'],
+        ];
+    }
+    return $divisions;
+}
+
+/**
+ * How a player currently on a roster was acquired: keeper slot,
+ * auction, draft, trade, or a "Waiver/FA" fallback. Originally built
+ * for transactions/rosters.php, pulled out here so any other page
+ * showing a franchise's roster (franchise/drop-player.php, etc.) can
+ * show the same real acquisition history instead of re-deriving it.
+ *
+ * Looks at current + prior year only (auction/draft/trade all confirmed
+ * live to return real per-year data for this league) -- a player from
+ * further back than that falls through to the "Waiver/FA" floor, same
+ * as MFL's own Rosters page doesn't distinguish waiver from FA either.
+ *
+ * Returns [$auctionByFranchisePlayer, $draftByFranchisePlayer,
+ * $tradeByFranchisePlayer], each keyed "franchiseId|playerId".
+ */
+function rotc_acquisition_maps(array $franchises): array {
+    $auctionByFranchisePlayer = [];
+    $draftByFranchisePlayer = [];
+    $tradeByFranchisePlayer = [];
+
+    // Auction history -- current + prior year. Later year wins if a
+    // player somehow shows in both (shouldn't happen, but favor the
+    // more recent acquisition just in case).
+    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $auctionYear) {
+        $auctionRaw = mfl_cached_get_year('auctionResults', $auctionYear, 21600, []);
+        foreach (mfl_normalize_list($auctionRaw['auctionResults']['auctionUnit']['auction'] ?? null) as $a) {
+            if (empty($a['franchise']) || empty($a['player'])) continue;
+            $key = $a['franchise'] . '|' . $a['player'];
+            $bid = $a['winningBid'] ?? '';
+            $auctionByFranchisePlayer[$key] = $auctionYear . '|' . $bid;
+        }
+    }
+
+    // Draft history -- current + prior year. This league runs a real
+    // snake draft every year alongside the auction (confirmed live:
+    // draftType "SDRAFT" with hundreds of real picks in 2023/2024/2025),
+    // so a player who wasn't a keeper or an auction pickup is very
+    // likely here.
+    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $draftYear) {
+        $draftRaw = mfl_cached_get_year('draftResults', $draftYear, 21600, []);
+        foreach (mfl_normalize_list($draftRaw['draftResults']['draftUnit']['draftPick'] ?? null) as $d) {
+            $pid = $d['player'] ?? '';
+            if (empty($d['franchise']) || $pid === '' || $pid === '0000' || $pid === '----') continue;
+            $key = $d['franchise'] . '|' . $pid;
+            $draftByFranchisePlayer[$key] = $draftYear . '|' . ($d['round'] ?? '');
+        }
+    }
+
+    // Trade history -- current + prior year. Each TRADE transaction
+    // lists player ids each side gave up (franchise1_gave_up /
+    // franchise2_gave_up); the players in franchise1's give-up list
+    // went TO franchise2, and vice versa. Confirmed live this data is
+    // structured player ids, not free text.
+    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $tradeYear) {
+        $tradeRaw = mfl_cached_get_year('transactions', $tradeYear, 21600, ['TRANS_TYPE' => 'TRADE']);
+        foreach (mfl_normalize_list($tradeRaw['transactions']['transaction'] ?? null) as $t) {
+            if (($t['type'] ?? '') !== 'TRADE') continue;
+            $f1 = $t['franchise'] ?? '';
+            $f2 = $t['franchise2'] ?? '';
+            $f1GaveUp = array_filter(explode(',', $t['franchise1_gave_up'] ?? ''));
+            $f2GaveUp = array_filter(explode(',', $t['franchise2_gave_up'] ?? ''));
+            foreach ($f1GaveUp as $pid) {
+                if ($f2 === '') continue;
+                $tradeByFranchisePlayer[$f2 . '|' . $pid] = $tradeYear . '|' . ($franchises[$f1]['abbrev'] ?? $f1);
+            }
+            foreach ($f2GaveUp as $pid) {
+                if ($f1 === '') continue;
+                $tradeByFranchisePlayer[$f1 . '|' . $pid] = $tradeYear . '|' . ($franchises[$f2]['abbrev'] ?? $f2);
+            }
+        }
+    }
+
+    return [$auctionByFranchisePlayer, $draftByFranchisePlayer, $tradeByFranchisePlayer];
+}
+
+/**
+ * Builds the Acquired column text for one roster row -- keeper slot,
+ * or the most recent matching entry from rotc_acquisition_maps(), in
+ * that priority order, falling back to "Waiver/FA".
+ */
+function rotc_acquired_label(string $franchiseId, string $playerId, string $drafted, array $auctionMap, array $draftMap, array $tradeMap): string {
+    if ($drafted !== '') return $drafted; // raw keeper slot label, e.g. "K1" -- no reinterpretation
+    $key = $franchiseId . '|' . $playerId;
+    // Kept deliberately short (2-digit year, franchise ABBREV not full
+    // name) -- these tables sit in tight multi-column layouts, and a
+    // full franchise name here ("2025 Trade w/ Flaming Chankla
+    // Chuckers") was blowing table widths out past their containers.
+    if (isset($auctionMap[$key])) {
+        [$year, $bid] = explode('|', $auctionMap[$key], 2);
+        $yy = substr($year, -2);
+        return $bid !== '' ? "'$yy Auction \$$bid" : "'$yy Auction";
+    }
+    if (isset($draftMap[$key])) {
+        [$year, $round] = explode('|', $draftMap[$key], 2);
+        $yy = substr($year, -2);
+        return $round !== '' ? "'$yy Rd " . (int) $round : "'$yy Draft";
+    }
+    if (isset($tradeMap[$key])) {
+        [$year, $fromAbbrev] = explode('|', $tradeMap[$key], 2);
+        $yy = substr($year, -2);
+        return "'$yy Trade: $fromAbbrev";
+    }
+    return 'Waiver/FA';
+}
+
+/**
+ * All tradable DRAFT PICK assets for every franchise in the league, via
+ * TYPE=assets. Player assets in that same response (a bare list of
+ * {id}) are ignored here -- rosters()/mfl_franchises() already cover
+ * players in the shape callers expect.
+ *
+ * Lives here (not in franchise/offer-trade.php where it started) so both
+ * that page and the /mobile Trade panel can call it -- offer-trade.php
+ * isn't a pure library (it renders a page on include), so it can't be
+ * required just for this helper.
+ *
+ * CONFIRMED live via ?debug=assets (2026-07-18): each franchise entry
+ * has currentYearDraftPicks.draftPick[] and futureYearDraftPicks.
+ * draftPick[]. Each draftPick comes with a ready-to-submit id in its
+ * 'pick' field (e.g. "FP_0001_2027_1") and a human-readable
+ * 'description'. currentYearDraftPicks was empty for every franchise in
+ * the live sample, so its shape is assumed symmetric with
+ * futureYearDraftPicks rather than separately confirmed.
+ *
+ * Returns:
+ *   'byFranchise' => [franchiseId => [pickId => label]]
+ *   'all' => [pickId => label incl. owning franchise]
+ * Requires the caller to have loaded mfl-auth.php (uses the authed call).
+ */
+function rotc_all_franchise_picks(array $franchises, string $myFranchiseId): array {
+    // "Access restricted to league owners" per MFL's docs, so this uses
+    // the logged-in owner's session cookie rather than the read-only APIKEY.
+    $resp = rotc_mfl_authed_request('export', 'assets');
+    $byFranchise = [];
+    $all = [];
+    if ($resp === null || isset($resp['error'])) return ['byFranchise' => $byFranchise, 'all' => $all];
+    foreach (mfl_normalize_list($resp['assets']['franchise'] ?? null) as $f) {
+        $fid = (string) ($f['id'] ?? '');
+        if ($fid === '') continue;
+        $picks = [];
+        $draftPicks = array_merge(
+            mfl_normalize_list($f['currentYearDraftPicks']['draftPick'] ?? null),
+            mfl_normalize_list($f['futureYearDraftPicks']['draftPick'] ?? null)
+        );
+        foreach ($draftPicks as $p) {
+            $id = (string) ($p['pick'] ?? '');
+            if ($id === '') continue;
+            $label = (string) ($p['description'] ?? $id);
+            $picks[$id] = $label;
+            $all[$id] = $label . ' (' . ($franchises[$fid]['abbrev'] ?? ($fid === $myFranchiseId ? 'you' : $fid)) . ')';
+        }
+        $byFranchise[$fid] = $picks;
+    }
+    return ['byFranchise' => $byFranchise, 'all' => $all];
+}
