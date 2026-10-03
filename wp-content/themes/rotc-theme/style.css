@@ -275,6 +275,30 @@ h1,h2,h3,h4{ font-family:"Roboto Condensed","Arial Narrow",sans-serif; line-heig
 .epkb-container a, #wpforo a{ color:var(--ink-2); }
 .epkb-container a:hover, #wpforo a:hover{ color:var(--accent); }
 
+/* ---- Echo Knowledge Base: pull its own per-instance inline styles
+   (set from the plugin's own admin UI, several carrying their own
+   !important) onto this theme's actual tokens instead of Echo KB's
+   defaults. Every selector here is prefixed with `body` purely to
+   out-specificity Echo KB's own rules regardless of stylesheet load
+   order -- not for any styling reason. Keep these mapped to --accent/
+   --ink-2/--radius rather than hardcoded colors so a palette change
+   in the :root block above stays in sync here automatically. */
+body #epkb-ml__module-search{ background-color:var(--ink-2) !important; }
+body .epkb-ml-search-box__btn{ background-color:var(--accent) !important; }
+body .epkb-top-category-box{ border-radius:var(--radius) !important; }
+body .epkb-top-category-box .section-head{
+  background-color:var(--accent) !important;
+  border-top-left-radius:var(--radius) !important;
+  border-top-right-radius:var(--radius) !important;
+}
+body #epkb-ml-basic-layout .epkb-cat-name,
+body .epkb-category-level-2-3__cat-name{
+  font-family:"Roboto Condensed",sans-serif !important;
+  text-transform:uppercase !important;
+  letter-spacing:.04em !important;
+  font-weight:700 !important;
+}
+
 /* ---- Generic WP block/editor baseline -------------------------------- */
 .alignwide{ margin-left:calc(50% - 50vw + 8px); margin-right:calc(50% - 50vw + 8px); max-width:none; }
 .wp-caption-text,figcaption{ font-size:13px; color:var(--muted); text-align:center; margin-top:6px; }
