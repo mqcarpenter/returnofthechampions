@@ -1,16 +1,17 @@
-# This repo mirrors the site's document root, but only tracks
-# wp-content/ (custom themes, plugins, uploads) plus the one custom
-# root index.php below. WordPress core (wp-admin, wp-includes, every
-# OTHER root wp-*.php file, wp-config.php) is vendor code / secrets --
+# This repo mirrors the site's document root -- the whole thing, one
+# site, one repo. It tracks wp-content/ (custom themes, plugins,
+# uploads), the one custom root index.php, /manage/ (the non-WordPress
+# fantasy-management app, same site, same server, same docroot), and
+# this .cpanel.yml. WordPress core (wp-admin, wp-includes, every OTHER
+# root wp-*.php file, wp-config.php) is vendor code / secrets --
 # trivially reinstalled or never meant to leave the server, not
-# something tracked here. /manage/ is its own fully separate git repo
-# (mqcarpenter/rotc26) with its own deploy workflow -- ignored here
-# (implicitly, by not being wp-content or index.php) so the two never
-# collide.
+# something tracked here.
 /*
 !/.gitignore
 !/wp-content
 !/index.php
+!/manage
+!/.cpanel.yml
 
 # The backup archives themselves must never be committed -- these are
 # multi-hundred-MB tar/zip files, not source content.
