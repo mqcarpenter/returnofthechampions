@@ -3,7 +3,7 @@ Theme Name: ROTC Theme
 Theme URI: https://www.returnofthechampions.com/
 Author: Return of the Champions
 Description: News-site theme for returnofthechampions.com, built to match the visual language of the league's custom /manage/ app (same palette, type, card system, and helmet art) instead of the stock seos-football theme. Installs alongside seos-football as a selectable option -- activating it does not modify or remove the existing theme. Pulls real league data (this week's headline result, standings, top performer) from /manage/api/wp-feed.php so the WordPress-hosted news pages and the fantasy-management app read as one site. Deployed via `git pull` directly on the host (same as /manage/), not WordPress's own theme-update mechanism -- see the repo's README.
-Version: 0.2.0
+Version: 0.2.1
 Requires at least: 6.0
 Requires PHP: 7.4
 Text Domain: rotc-theme

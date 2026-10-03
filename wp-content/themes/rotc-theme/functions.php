@@ -9,7 +9,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ROTC_THEME_VERSION', '0.2.0');
+define('ROTC_THEME_VERSION', '0.2.1');
 
 function rotc_theme_setup(): void {
     add_theme_support('title-tag');
