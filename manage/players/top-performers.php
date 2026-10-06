@@ -40,6 +40,7 @@ $fetchError = !file_exists($configPath);
 $weekParam = $_GET['week'] ?? 'YTD';
 $posFilter = $_GET['pos'] ?? '';
 $faOnly    = !empty($_GET['fa']);
+$teamParam = $_GET['team'] ?? '';
 $positions = ['QB', 'RB', 'WR', 'TE', 'DT', 'DE', 'LB', 'CB', 'S'];
 
 $rows = [];
@@ -63,8 +64,10 @@ if (!$fetchError) {
     }
 
     // Scan the whole scoring pool when filtering to free agents (most top
-    // scorers are rostered, so a top-200 slice would show almost none).
-    $raw = mfl_cached_get_year('playerScores', $yearParam, 1800, ['W' => $weekParam, 'COUNT' => $faOnly ? 3000 : 200]);
+    // scorers are rostered, so a top-200 slice would show almost none) or
+    // to one team's roster (a bench player's season total can easily sit
+    // outside the overall top 200, even though it belongs on this list).
+    $raw = mfl_cached_get_year('playerScores', $yearParam, 1800, ['W' => $weekParam, 'COUNT' => ($faOnly || $teamParam) ? 3000 : 200]);
     $list = mfl_normalize_list($raw['playerScores']['playerScore'] ?? null);
     $list = array_values(array_filter($list, fn($r) => !empty($r['id']) && $r['score'] !== ''));
     $ids = array_column($list, 'id');
@@ -89,6 +92,7 @@ if (!$fetchError) {
         if ($faOnly && !isset($faIds[$row['id']])) continue;
         if ($posFilter && ($p['position'] ?? '') !== $posFilter) continue;
         $ownerId = $ownerByPlayerId[$row['id']] ?? null;
+        if ($teamParam !== '' && $ownerId !== $teamParam) continue;
         $rows[] = [
             'pd' => $p,
             'name' => $p['name'] ?? ('Player #' . $row['id']),
@@ -135,7 +139,7 @@ function rotc_qs3(array $overrides): string {
       <div class="card"><p>Player stats aren't available right now — check back soon.</p></div>
     <?php else: ?>
       <div class="card">
-        <h2 class="card-title">Top Performers <?= htmlspecialchars((string) $yearParam) ?> <?= $weekParam === 'YTD' ? '(Season)' : '(Week ' . htmlspecialchars($weekParam) . ')' ?></h2>
+        <h2 class="card-title">Top Performers <?= htmlspecialchars((string) $yearParam) ?> <?= $weekParam === 'YTD' ? '(Season)' : '(Week ' . htmlspecialchars($weekParam) . ')' ?><?= $teamParam !== '' && isset($franchises[$teamParam]) ? ' — ' . htmlspecialchars($franchises[$teamParam]['name']) : '' ?></h2>
 
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:8px 0 16px;">
           <form method="get" style="margin:0;">
@@ -144,6 +148,15 @@ function rotc_qs3(array $overrides): string {
               <?php for ($y = (int) MFL_YEAR; $y >= (int) MFL_YEAR - 2; $y--): ?>
                 <option value="<?= $y ?>"<?= $y === $yearParam ? ' selected' : '' ?>><?= $y ?></option>
               <?php endfor; ?>
+            </select>
+          </form>
+          <form method="get" style="margin:0;">
+            <?php foreach ($_GET as $k => $v): if ($k !== 'team' && $k !== 'fa'): ?><input type="hidden" name="<?= htmlspecialchars($k) ?>" value="<?= htmlspecialchars($v) ?>"><?php endif; endforeach; ?>
+            <select name="team" onchange="this.form.submit()" style="padding:4px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+              <option value="">All Teams</option>
+              <?php foreach ($franchises as $fid => $f): ?>
+                <option value="<?= htmlspecialchars($fid) ?>"<?= $fid === $teamParam ? ' selected' : '' ?>><?= htmlspecialchars($f['name']) ?></option>
+              <?php endforeach; ?>
             </select>
           </form>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -160,7 +173,7 @@ function rotc_qs3(array $overrides): string {
           <?php endforeach; ?>
         </div>
         <div style="margin:0 0 16px;">
-          <a href="<?= rotc_qs3(['fa' => $faOnly ? null : 1]) ?>" style="display:inline-block;padding:6px 14px;border-radius:999px;border:1px solid var(--accent);font-weight:700;font-size:13px;<?= $faOnly ? 'background:var(--accent);color:var(--on-ink);' : 'color:var(--accent);' ?>"><?= $faOnly ? '✓ ' : '' ?>Free Agents Only</a>
+          <a href="<?= rotc_qs3(['fa' => $faOnly ? null : 1, 'team' => null]) ?>" style="display:inline-block;padding:6px 14px;border-radius:999px;border:1px solid var(--accent);font-weight:700;font-size:13px;<?= $faOnly ? 'background:var(--accent);color:var(--on-ink);' : 'color:var(--accent);' ?>"><?= $faOnly ? '✓ ' : '' ?>Free Agents Only</a>
           <?php if ($faOnly): ?><span style="color:var(--muted);font-size:12px;margin-left:8px;">Showing only players available in your league.</span><?php endif; ?>
         </div>
 
