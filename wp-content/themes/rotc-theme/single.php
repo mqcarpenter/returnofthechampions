@@ -16,6 +16,8 @@
  *   are untouched.)
  * - Share links (X, Facebook, copy-link) next to the byline.
  * - "More News" sidebar now shows a thumbnail per item, not bare text.
+ * - "Top Players" sidebar widget (season leaders, position tabs, hover
+ *   photo cards) between Scores and More News.
  * - A related-posts grid (reusing the same card partial the homepage/
  *   archive use) now runs below the article body -- previously nothing
  *   followed the post at all.
@@ -94,6 +96,7 @@ get_header();
 
   <aside class="rotc-sidebar">
     <?php get_template_part('template-parts/sidebar-scores'); ?>
+    <?php get_template_part('template-parts/sidebar-top-players'); ?>
     <div class="rotc-card">
       <h3 class="rotc-section-title" style="font-size:15px;"><?php esc_html_e('More News', 'rotc-theme'); ?></h3>
       <?php

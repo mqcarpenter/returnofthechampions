@@ -97,3 +97,31 @@ function rotc_theme_find_game(?array $weekFeed, string $teamId): ?array {
     }
     return null;
 }
+
+/**
+ * Top fantasy scorers for the sidebar "Top Players" widget, from
+ * manage/api/wp-top-players.php (season totals, top 10 overall and per
+ * position, each with the hover-card fields pre-built). Same transient
+ * + stale-fallback pattern as rotc_theme_get_league_feed().
+ *
+ * @return array|null Decoded feed, or null if unreachable / empty --
+ *   callers must render nothing in that case, never fatal.
+ */
+function rotc_theme_get_top_players(): ?array {
+    $key = 'rotc_top_players';
+    $cached = get_transient($key);
+    if (is_array($cached)) return $cached;
+
+    $response = wp_remote_get(trailingslashit(home_url()) . 'manage/api/wp-top-players.php', ['timeout' => 8]);
+    if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+        $stale = get_transient($key . '_stale');
+        return is_array($stale) ? $stale : null;
+    }
+
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    if (!is_array($data) || empty($data['players']['ALL'])) return null;
+
+    set_transient($key, $data, ROTC_LEAGUE_FEED_TTL);
+    set_transient($key . '_stale', $data, DAY_IN_SECONDS);
+    return $data;
+}
