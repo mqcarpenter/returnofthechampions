@@ -133,6 +133,49 @@ function rotc_injury_tag(?string $playerId, ?string $status = null): string {
          . '(' . htmlspecialchars($badge['abbr']) . ')</span>';
 }
 
+/* ============================================================
+   MFL PLAYER PROFILE LINK
+   This app deliberately never shows real in-game NFL stat lines (see
+   the file doc comment -- MFL's API terms forbid it), and MFL's export
+   API has no per-player "recent news" data at all (only `siteNews`,
+   which is league-wide commissioner/trade activity, not NFL player
+   news) -- confirmed against MFL's own API reference doc
+   (docs/api_info-2026-07-17.html has no player-scoped news export).
+   So there's no data this app can use to flag "this specific player
+   has news right now" -- this icon is a constant, always-available
+   link out to MFL's own player page instead, which is where real NFL
+   stats and news both actually live. Shown on every player uniformly
+   rather than faking a "has news" condition this app can't detect.
+
+   Reuses news_articles?P=<id> -- the same MFL URL pattern already live
+   in templates/nav-data.php's "Player News" nav item (P=* there is a
+   wildcard; a real player id works the same way) -- and the same
+   MFL-popup window technique already used for every other MFL link in
+   this app (templates/nav-data.php's rotc_nav_sub_item()).
+   SEASON ROLLOVER: same as nav-data.php -- find-and-replace the /2026/
+   path segment here once a year.
+   ============================================================ */
+function rotc_mfl_player_url(string $playerId): string {
+    return 'https://www42.myfantasyleague.com/2026/news_articles?L=' . MFL_LEAGUE_ID . '&P=' . urlencode($playerId);
+}
+
+/**
+ * Small icon link to a player's MFL profile (news + real NFL stats),
+ * opened in MFL's own popup window. Returns '' if $playerId is empty
+ * (e.g. a row rendered without a resolved MFL id).
+ */
+function rotc_mfl_player_link(?string $playerId): string {
+    if (!$playerId) return '';
+    $url = rotc_mfl_player_url($playerId);
+    return ' <a href="' . htmlspecialchars($url) . '" class="rotc-player-mfl-link"'
+         . ' title="Open this player on MFL (news + NFL stats)"'
+         . ' aria-label="Open player on MFL"'
+         . ' target="_blank" rel="noopener"'
+         . ' onclick="window.open(this.href,\'rotc_mfl\',\'width=1200,height=900,resizable=yes,scrollbars=yes\'); return false;">'
+         . '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>'
+         . '</a>';
+}
+
 /**
  * Wraps $displayName in the hoverable span. $statLines is an
  * associative array of label => value (e.g. ['2025 Total' => '413.20
@@ -146,18 +189,22 @@ function rotc_player_hover_span(string $displayName, ?array $pd, array $statLine
         if ($value === '' || $value === null) continue;
         $lines[] = htmlspecialchars($label) . ': <strong>' . htmlspecialchars((string) $value) . '</strong>';
     }
-    // Injury tag sits OUTSIDE the hover trigger, so it keeps its own
-    // tooltip (the full status + body part + expected return) instead of
-    // being swallowed by the photo card. Every page rendering names
-    // through this helper gets it without touching a single call site.
-    $inj = rotc_injury_tag(isset($pd['id']) ? (string) $pd['id'] : null);
+    // Injury tag and the MFL profile link both sit OUTSIDE the hover
+    // trigger -- the injury tag keeps its own tooltip (full status +
+    // body part + expected return) and the MFL link needs to stay a
+    // real, independently clickable <a> -- neither should be swallowed
+    // by the photo card. Every page rendering names through this helper
+    // gets both without touching a single call site.
+    $playerId = isset($pd['id']) ? (string) $pd['id'] : null;
+    $inj = rotc_injury_tag($playerId);
+    $mflLink = rotc_mfl_player_link($playerId);
 
     return '<span class="rotc-player-hover"'
         . ' data-name="' . htmlspecialchars($displayName) . '"'
         . ' data-photo="' . htmlspecialchars($photo ?? '') . '"'
         . ' data-bio="' . htmlspecialchars($bio) . '"'
         . ' data-stats="' . htmlspecialchars(implode('<br>', $lines)) . '">'
-        . htmlspecialchars($displayName) . '</span>' . $inj;
+        . htmlspecialchars($displayName) . '</span>' . $inj . $mflLink;
 }
 
 /**

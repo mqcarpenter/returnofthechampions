@@ -1255,3 +1255,12 @@ a.rotc-nav-inactive:hover{ color:#8a7a6c99 !important; background:none !importan
 .rotc-inj-out{  color:#b3261e; }
 .rotc-inj-warn{ color:#8a5a00; }
 .rotc-inj-gone{ color:#8A7A6C; }
+
+/* MFL player-profile link icon -- rides directly after a name/injury
+   tag the same way, so it has to read as a quiet annotation rather
+   than compete with the name for attention until hovered. */
+.rotc-player-mfl-link{
+  display:inline-flex; vertical-align:-2px; margin-left:3px;
+  color:var(--muted); opacity:.65;
+}
+.rotc-player-mfl-link:hover{ color:var(--accent); opacity:1; }
