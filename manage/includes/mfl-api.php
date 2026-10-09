@@ -171,6 +171,111 @@ function rotc_injury_badge(string $status): ?array {
     return ['abbr' => substr($s, 0, 2), 'key' => 'gone'];
 }
 
+/* ---- LEAGUE PLAYER CONTEXT ------------------------------------------
+ * Three more enrichment maps in the same static-cached, request-scoped
+ * style as rotc_injury_map() above -- powers the "real player data for
+ * the league" fields on the hover card (includes/player-hover.php's
+ * rotc_player_hover_span()), so every page using that shared widget
+ * gets owner/season-total/position-rank/bye-week for free without each
+ * page re-fetching it.
+ */
+
+/**
+ * [playerId => franchise name] for every rostered player in THIS
+ * league, via TYPE=rosters. A player with no entry is a free agent --
+ * callers check isset() rather than relying on a sentinel value here,
+ * same convention rotc_free_agent_ids() uses. Cached 30 min: ownership
+ * changes with adds/drops/trades, not instantly, so this doesn't need
+ * the short TTL a live-scoring feed would.
+ */
+function rotc_owner_map(): array {
+    static $map = null;
+    if ($map !== null) return $map;
+    $map = [];
+    $franchises = mfl_franchises();
+    $raw = mfl_cached_get('rosters', 1800);
+    foreach (mfl_normalize_list($raw['rosters']['franchise'] ?? null) as $fr) {
+        $name = $franchises[$fr['id']]['name'] ?? $fr['id'];
+        foreach (mfl_normalize_list($fr['player'] ?? null) as $p) {
+            if (!empty($p['id'])) $map[(string) $p['id']] = $name;
+        }
+    }
+    return $map;
+}
+
+/**
+ * [NFL team abbrev => bye week number], via TYPE=nflByeWeeks. Same
+ * source/shape players/free-agents.php already builds inline; pulled
+ * out here so the hover card can use it too without duplicating the
+ * fetch. Cached 24h -- a bye week is fixed for the whole season.
+ */
+function rotc_bye_week_map(): array {
+    static $map = null;
+    if ($map !== null) return $map;
+    $map = [];
+    $raw = mfl_cached_get('nflByeWeeks', 86400, [], false);
+    foreach (mfl_normalize_list($raw['nflByeWeeks']['team'] ?? null) as $t) {
+        if (!empty($t['id'])) $map[(string) $t['id']] = (string) ($t['bye_week'] ?? '');
+    }
+    return $map;
+}
+
+/**
+ * [playerId => ['total'=>float, 'rank'=>int, 'posCount'=>int]] -- this
+ * season's (MFL_YEAR, W=YTD) total fantasy points and rank among every
+ * OTHER player at the same position with a nonzero season total, league
+ * scoring rules applied (same TYPE=playerScores this app always reads
+ * points from -- never a raw/generic stat total).
+ *
+ * COUNT=3000 (not the ~100 MFL defaults to) and a second TYPE=players
+ * call for position -- same two-step join players/top-performers.php
+ * already does for its own table, just run once here and reused by
+ * every hover card on the page instead of each page repeating it.
+ * Cached 30 min, matching top-performers.php's own playerScores TTL.
+ *
+ * A player with no score yet this season (rookie pre-debut, etc.)
+ * simply has no entry -- callers check isset().
+ */
+function rotc_season_rank_map(): array {
+    static $map = null;
+    if ($map !== null) return $map;
+    $map = [];
+
+    $raw = mfl_cached_get_year('playerScores', (int) MFL_YEAR, 1800, ['W' => 'YTD', 'COUNT' => 3000]);
+    $list = mfl_normalize_list($raw['playerScores']['playerScore'] ?? null);
+    $scoreById = [];
+    foreach ($list as $row) {
+        if (empty($row['id']) || $row['score'] === '' || (float) $row['score'] <= 0) continue;
+        $scoreById[(string) $row['id']] = (float) $row['score'];
+    }
+    if (!$scoreById) return $map;
+
+    $positionById = [];
+    foreach (array_chunk(array_keys($scoreById), 250) as $chunk) {
+        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk)], false);
+        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
+            if (!empty($p['id'])) $positionById[(string) $p['id']] = (string) ($p['position'] ?? '');
+        }
+    }
+
+    $byPosition = [];
+    foreach ($scoreById as $id => $score) {
+        $pos = $positionById[$id] ?? '';
+        if ($pos === '') continue;
+        $byPosition[$pos][$id] = $score;
+    }
+    foreach ($byPosition as $pos => $scores) {
+        arsort($scores);
+        $rank = 0;
+        $count = count($scores);
+        foreach ($scores as $id => $score) {
+            $rank++;
+            $map[$id] = ['total' => $score, 'rank' => $rank, 'posCount' => $count];
+        }
+    }
+    return $map;
+}
+
 /**
  * MFL collapses single-result lists to a bare associative array instead
  * of a one-item list (confirmed live: TYPE=players with one match

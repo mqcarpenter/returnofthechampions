@@ -101,6 +101,36 @@ function rotc_player_bio_bits(?array $pd): array {
    ============================================================ */
 
 /**
+ * "Questionable (Hamstring — back Sep 13, 2026)" -- the full readable
+ * injury line, shared by rotc_injury_tag()'s tooltip below AND the
+ * hover card's injury field, so the two never drift out of sync.
+ * '' when $status is blank/unrecognized.
+ */
+function rotc_injury_compose_detail(string $status, string $details, string $expReturn): string {
+    $badge = rotc_injury_badge($status);
+    if (!$badge) return '';
+    // "back Feb 15, 2027" on a RETIRED player is nonsense -- MFL parks a
+    // placeholder date on the statuses that aren't a real return. Only
+    // the ones someone is actually waiting on get a return date.
+    if ($badge['key'] === 'gone') $expReturn = '';
+    if ($expReturn !== '') $details = trim($details . ($details !== '' ? ' — ' : '') . 'back ' . $expReturn);
+    return trim($status . ($details !== '' ? ' (' . $details . ')' : ''));
+}
+
+/**
+ * The full injury line for a player id (see rotc_injury_compose_detail
+ * above), or '' when they're healthy / have no injury row. For the
+ * hover card -- rotc_injury_tag() below is the compact "(Q)" tag that
+ * sits outside it.
+ */
+function rotc_injury_detail_text(?string $playerId): string {
+    if (!$playerId) return '';
+    $row = rotc_injury_map()[$playerId] ?? null;
+    if (!$row) return '';
+    return rotc_injury_compose_detail($row['status'], $row['details'], $row['exp_return']);
+}
+
+/**
  * The rendered "(Q)" tag for a player id, or '' when they're healthy.
  * Always returns safe HTML (or an empty string), so call sites can
  * concatenate it straight onto a name with no further escaping.
@@ -122,12 +152,7 @@ function rotc_injury_tag(?string $playerId, ?string $status = null): string {
     }
     $badge = rotc_injury_badge((string) $status);
     if (!$badge) return '';
-    // "back Feb 15, 2027" on a RETIRED player is nonsense -- MFL parks a
-    // placeholder date on the statuses that aren't a real return. Only
-    // the ones someone is actually waiting on get a return date.
-    if ($badge['key'] === 'gone') $return = '';
-    if ($return !== '') $detail = trim($detail . ($detail !== '' ? ' — ' : '') . 'back ' . $return);
-    $title = trim($status . ($detail !== '' ? ' (' . $detail . ')' : ''));
+    $title = rotc_injury_compose_detail((string) $status, $detail, $return);
     return ' <span class="rotc-inj rotc-inj-' . $badge['key'] . '"'
          . ' title="' . htmlspecialchars($title) . '">'
          . '(' . htmlspecialchars($badge['abbr']) . ')</span>';
@@ -184,8 +209,33 @@ function rotc_mfl_player_link(?string $playerId): string {
 function rotc_player_hover_span(string $displayName, ?array $pd, array $statLines = []): string {
     $photo = rotc_espn_photo($pd);
     $bio = implode(' · ', rotc_player_bio_bits($pd));
+    $id = isset($pd['id']) ? (string) $pd['id'] : null;
+
+    // League context -- the "real data for THIS league" fields, built
+    // from rotc_owner_map()/rotc_season_rank_map()/rotc_bye_week_map()
+    // (includes/mfl-api.php), each fetched once per page load no matter
+    // how many player cards render. Shown ahead of whatever page-
+    // specific stat the caller passes in via $statLines, so every hover
+    // card leads with the same "who has them, how many points, ranked
+    // where, injury status" picture regardless of which page it's on.
+    $leagueLines = [];
+    if ($id !== null) {
+        $leagueLines['Fantasy Team'] = rotc_owner_map()[$id] ?? 'Free Agent';
+        $rank = rotc_season_rank_map()[$id] ?? null;
+        if ($rank) {
+            $leagueLines[(string) MFL_YEAR . ' Total'] = number_format($rank['total'], 2) . ' pts';
+            $pos = $pd['position'] ?? '';
+            $leagueLines['Position Rank'] = ($pos !== '' ? $pos . ' ' : '') . '#' . $rank['rank'] . ' of ' . $rank['posCount'];
+        }
+        $team = $pd['team'] ?? '';
+        $bye = $team !== '' ? (rotc_bye_week_map()[$team] ?? '') : '';
+        if ($bye !== '') $leagueLines['Bye Week'] = $bye;
+        $injDetail = rotc_injury_detail_text($id);
+        if ($injDetail !== '') $leagueLines['Status'] = $injDetail;
+    }
+
     $lines = [];
-    foreach ($statLines as $label => $value) {
+    foreach ($leagueLines + $statLines as $label => $value) {
         if ($value === '' || $value === null) continue;
         $lines[] = htmlspecialchars($label) . ': <strong>' . htmlspecialchars((string) $value) . '</strong>';
     }
