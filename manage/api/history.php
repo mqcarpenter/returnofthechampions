@@ -32,6 +32,10 @@
 
 const ROTC_HISTORY_API_VERSION = 1;
 
+// The host's PHP writes floats with every digit (253.659999999999996589...).
+// -1 gives the shortest form that round-trips (253.66). Seen live 2026-11-19.
+ini_set('serialize_precision', '-1');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 header('X-Content-Type-Options: nosniff');
@@ -67,12 +71,12 @@ function rotc_history_int(string $key, int $default, int $min, int $max): int {
     return $n;
 }
 
-/** Cast numeric strings from PDO to real numbers so the JSON carries numbers, not "123.45". */
+/** Numbers out of PDO (strings or floats, depending on the driver) as ints or 2-decimal floats. */
 function rotc_history_numbers(array $rows): array {
     $ints = ['season', 'week', 'is_playoff', 'wins', 'losses', 'ties', 'games', 'last_season', 'first_season', 'id', 'franchise_id'];
     foreach ($rows as &$r) {
         foreach ($r as $k => $v) {
-            if ($v === null || !is_string($v) || !is_numeric($v)) continue;
+            if ($v === null || is_bool($v) || !is_numeric($v)) continue;
             $r[$k] = in_array($k, $ints, true) ? (int) $v : round((float) $v, 2);
         }
     }
