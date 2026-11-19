@@ -15,7 +15,7 @@ function rotc_social_links(): array {
         'instagram' => ['label' => 'Instagram', 'url' => 'https://www.instagram.com/returnofthechampions/'],
         'facebook'  => ['label' => 'Facebook',  'url' => 'https://www.facebook.com/profile.php?id=61596716399929'],
         'x'         => ['label' => 'X',         'url' => 'https://x.com/ROTCtheleague'],
-        'tiktok'    => ['label' => 'TikTok',    'url' => ''],  // e.g. https://www.tiktok.com/@yourhandle
+        'tiktok'    => ['label' => 'TikTok',    'url' => 'https://www.tiktok.com/@rotc.the.league'],
     ];
 }
 
