@@ -188,7 +188,7 @@ const ROTC_HOME_NFL_ABBR = [
     // replaced Draft Trends. It doesn't need MFL, so it shows even without
     // config.php (as a Follow card until a token is set).
     require_once __DIR__ . '/includes/instagram-feed.php';
-    $instagram_posts = rotc_fetch_instagram_posts(9);
+    $instagram_posts = rotc_fetch_instagram_posts(7); // 1 featured + a 2-row grid of 6
     $top_free_agents = [];
     if ($hasConfig) {
         require_once __DIR__ . '/includes/free-agent-pulse.php';

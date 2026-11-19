@@ -429,12 +429,22 @@ a:hover{ color:var(--accent); }
 .rotc-sidefeed-item .title:hover{ color:var(--accent); }
 .rotc-sidefeed-item .desc{ font-size:12px; line-height:1.5; color:var(--muted); }
 
-/* Instagram tab (templates/free-agent-pulse.php): @handle + Follow, then a
-   3-across grid of square post thumbnails linking out to Instagram. */
+/* Instagram tab (templates/free-agent-pulse.php): @handle + Follow, the
+   newest post featured large with caption + date, then a 3-across grid of
+   square thumbnails. Everything links out to Instagram. */
 .rotc-ig-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px 8px; }
 .rotc-ig-handle{ font-weight:700; font-size:13px; color:var(--ink); }
 .rotc-ig-follow{ display:inline-block; background:var(--accent); color:#fff; font-weight:700; font-size:11px; letter-spacing:.04em; text-transform:uppercase; padding:5px 10px; border-radius:4px; }
 .rotc-ig-follow:hover{ color:#fff; filter:brightness(.92); }
+.rotc-ig-feature{ display:block; padding:0 3px 10px; color:var(--ink); }
+.rotc-ig-feature:hover{ color:var(--ink); }
+.rotc-ig-feature-media{ position:relative; display:block; aspect-ratio:4/5; overflow:hidden; background:var(--sand); }
+.rotc-ig-feature-media img{ width:100%; height:100%; object-fit:cover; display:block; transition:transform .25s ease; }
+.rotc-ig-feature:hover .rotc-ig-feature-media img, .rotc-ig-feature:focus-visible .rotc-ig-feature-media img{ transform:scale(1.03); }
+.rotc-ig-play{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:52px; height:52px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; padding-left:4px; box-sizing:border-box; pointer-events:none; }
+.rotc-ig-caption{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; line-height:1.45; margin:8px 11px 2px; white-space:pre-line; }
+.rotc-ig-date{ display:block; font-family:"Roboto Condensed", sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:11px; color:var(--muted); margin:0 11px; }
+.rotc-ig-feature:hover .rotc-ig-caption{ color:var(--accent); }
 .rotc-ig-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; padding:0 3px; }
 .rotc-ig-tile{ position:relative; display:block; aspect-ratio:1/1; overflow:hidden; background:var(--sand); }
 .rotc-ig-tile img{ width:100%; height:100%; object-fit:cover; display:block; transition:transform .2s ease; }

@@ -48,18 +48,40 @@ function rotc_fa_pulse_row(array $r): void {
       <a class="rotc-ig-handle" href="<?= htmlspecialchars($ig_profile) ?>" target="_blank" rel="noopener">@<?= htmlspecialchars($ig_handle) ?></a>
       <a class="rotc-ig-follow" href="<?= htmlspecialchars($ig_profile) ?>" target="_blank" rel="noopener">Follow</a>
     </div>
-    <?php if ($instagram_posts): ?>
-      <div class="rotc-ig-grid">
-        <?php foreach ($instagram_posts as $p):
-          $alt = $p['caption'] !== '' ? mb_strimwidth(preg_replace('/\s+/', ' ', $p['caption']), 0, 120, '…') : 'Instagram post from @' . $ig_handle;
-        ?>
-          <a class="rotc-ig-tile" href="<?= htmlspecialchars($p['url']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($alt) ?>">
-            <img src="<?= htmlspecialchars($p['image']) ?>" alt="<?= htmlspecialchars($alt) ?>" loading="lazy" decoding="async">
-            <?php if ($p['type'] === 'VIDEO'): ?><span class="rotc-ig-badge" aria-label="Video">&#9654;</span>
-            <?php elseif ($p['type'] === 'CAROUSEL_ALBUM'): ?><span class="rotc-ig-badge" aria-label="Several photos">&#10697;</span><?php endif; ?>
-          </a>
-        <?php endforeach; ?>
-      </div>
+    <?php if ($instagram_posts):
+      $ig_alt = function (array $p) use ($ig_handle): string {
+          return $p['caption'] !== '' ? mb_strimwidth(preg_replace('/\s+/', ' ', $p['caption']), 0, 120, '…') : 'Instagram post from @' . $ig_handle;
+      };
+      $ig_badge = function (array $p): string {
+          if ($p['type'] === 'VIDEO') return '<span class="rotc-ig-badge" aria-label="Video">&#9654;</span>';
+          if ($p['type'] === 'CAROUSEL_ALBUM') return '<span class="rotc-ig-badge" aria-label="Several photos">&#10697;</span>';
+          return '';
+      };
+      $ig_feature = $instagram_posts[0];
+      $ig_rest = array_slice($instagram_posts, 1);
+    ?>
+      <a class="rotc-ig-feature" href="<?= htmlspecialchars($ig_feature['url']) ?>" target="_blank" rel="noopener">
+        <span class="rotc-ig-feature-media">
+          <img src="<?= htmlspecialchars($ig_feature['image']) ?>" alt="<?= htmlspecialchars($ig_alt($ig_feature)) ?>" decoding="async">
+          <?php if ($ig_feature['type'] === 'VIDEO'): ?><span class="rotc-ig-play" aria-label="Video">&#9654;</span><?php else: echo $ig_badge($ig_feature); endif; ?>
+        </span>
+        <?php if ($ig_feature['caption'] !== ''): ?>
+          <span class="rotc-ig-caption"><?= htmlspecialchars($ig_feature['caption']) ?></span>
+        <?php endif; ?>
+        <?php if ($ig_feature['time']): ?>
+          <span class="rotc-ig-date"><?= htmlspecialchars(date('M j', $ig_feature['time'])) ?></span>
+        <?php endif; ?>
+      </a>
+      <?php if ($ig_rest): ?>
+        <div class="rotc-ig-grid">
+          <?php foreach ($ig_rest as $p): $alt = $ig_alt($p); ?>
+            <a class="rotc-ig-tile" href="<?= htmlspecialchars($p['url']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($alt) ?>">
+              <img src="<?= htmlspecialchars($p['image']) ?>" alt="<?= htmlspecialchars($alt) ?>" loading="lazy" decoding="async">
+              <?= $ig_badge($p) ?>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
       <div class="rotc-ig-more"><a href="<?= htmlspecialchars($ig_profile) ?>" target="_blank" rel="noopener">See more on Instagram &rarr;</a></div>
     <?php else: ?>
       <div class="rotc-sidefeed-item">
