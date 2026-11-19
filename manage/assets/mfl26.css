@@ -474,6 +474,13 @@ a:hover{ color:var(--accent); }
 .rotc-foot-bar a:hover{ color:var(--accent); }
 @media (max-width:760px){ .rotc-foot-grid{ grid-template-columns:1fr; gap:22px; } }
 
+/* Social icon row (includes/socials.php), used in BOTH footers: this one
+   and the WordPress theme's .rotc-footer, which also loads this file. */
+.rotc-socials{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.rotc-socials .rotc-social{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.08); color:var(--paper); opacity:1; transition:background .15s ease, color .15s ease; }
+.rotc-socials .rotc-social:hover, .rotc-socials .rotc-social:focus-visible{ background:var(--accent); color:#fff; }
+.rotc-socials svg{ display:block; }
+
 /* Collapsible conference/division groups on transactions/rosters.php.
    Native <details>/<summary> needs no JS; this just hides the default
    marker (styled differently per-browser) in favor of one custom arrow

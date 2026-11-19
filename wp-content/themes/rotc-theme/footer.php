@@ -18,6 +18,16 @@ if (!defined('ABSPATH')) exit;
         <p><a href="<?php echo esc_url(rotc_theme_page_url('community')); ?>"><?php esc_html_e('Smack Board', 'rotc-theme'); ?></a></p>
         <p><a href="<?php echo esc_url(rotc_theme_page_url('faq')); ?>"><?php esc_html_e('FAQ', 'rotc-theme'); ?></a></p>
       </div>
+      <?php
+      // Same accounts + icons as the homepage footer: one list in manage/includes/socials.php.
+      $rotcSocials = dirname(ABSPATH) . '/manage/includes/socials.php';
+      if (file_exists($rotcSocials)): require_once $rotcSocials; $rotcSocialHtml = rotc_social_icons_html();
+        if ($rotcSocialHtml !== ''): ?>
+        <div>
+          <h3 class="rotc-footer-heading"><?php esc_html_e('Follow', 'rotc-theme'); ?></h3>
+          <?php echo $rotcSocialHtml; // built from fixed URLs, already escaped ?>
+        </div>
+      <?php endif; endif; ?>
       <?php if (has_nav_menu('footer')): ?>
         <div>
           <h3 class="rotc-footer-heading"><?php esc_html_e('More', 'rotc-theme'); ?></h3>

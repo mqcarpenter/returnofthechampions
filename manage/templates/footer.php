@@ -16,6 +16,7 @@
     <div class="rotc-foot-brand">
       <b>Return of the <span>Champions</span></b>
       <p>The quest to be the best. A 26-season dynasty keeper IDP auction league.</p>
+      <?php require_once __DIR__ . '/../includes/socials.php'; echo rotc_social_icons_html(); ?>
     </div>
 
     <div class="rotc-foot-group">
