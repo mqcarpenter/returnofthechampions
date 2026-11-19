@@ -13,7 +13,7 @@
 function rotc_social_links(): array {
     return [
         'instagram' => ['label' => 'Instagram', 'url' => 'https://www.instagram.com/returnofthechampions/'],
-        'facebook'  => ['label' => 'Facebook',  'url' => 'https://www.facebook.com/1448717984991844'],
+        'facebook'  => ['label' => 'Facebook',  'url' => 'https://www.facebook.com/profile.php?id=61596716399929'],
         'x'         => ['label' => 'X',         'url' => ''],  // e.g. https://x.com/yourhandle
         'tiktok'    => ['label' => 'TikTok',    'url' => ''],  // e.g. https://www.tiktok.com/@yourhandle
     ];
