@@ -17,6 +17,12 @@
  * (falling back to the temp dir if that folder isn't writable). Pasting a
  * NEW token into config.php always wins over the saved one.
  *
+ * Facebook-login tokens (starting "EAA") work too, through graph.facebook.com:
+ * the Instagram account must be a professional account linked to a Facebook
+ * Page. A Page token (from a long-lived user token) never expires; a user
+ * token works while it lasts. Those can't be self-refreshed, so the weekly
+ * refresh only runs for Instagram-login tokens.
+ *
  * Same server-to-server + file-cache pattern as includes/smack-feed.php:
  * the feed is cached for an hour, a failed fetch serves the last good copy
  * (up to 3 days, after which Instagram's signed image URLs have expired
@@ -26,6 +32,7 @@
 
 const ROTC_IG_DEFAULT_HANDLE = 'returnofthechampions';
 const ROTC_IG_API = 'https://graph.instagram.com';
+const ROTC_FB_API = 'https://graph.facebook.com';
 const ROTC_IG_FEED_TTL = 3600;            // 1 hour
 const ROTC_IG_STALE_MAX = 3 * 86400;      // serve a stale copy for up to 3 days
 const ROTC_IG_REFRESH_EVERY = 7 * 86400;  // refresh the token weekly (it lasts 60 days)
@@ -93,7 +100,7 @@ function rotc_instagram_token(): ?string {
         @chmod($stateFile, 0600);
     }
 
-    if (time() - (int) ($state['refreshed_at'] ?? 0) >= ROTC_IG_REFRESH_EVERY) {
+    if (!rotc_instagram_is_fb_token($state['token']) && time() - (int) ($state['refreshed_at'] ?? 0) >= ROTC_IG_REFRESH_EVERY) {
         $fresh = rotc_instagram_http_get(ROTC_IG_API . '/refresh_access_token?grant_type=ig_refresh_token&access_token=' . rawurlencode($state['token']));
         if (!empty($fresh['access_token'])) {
             $state['token'] = $fresh['access_token'];
@@ -104,6 +111,44 @@ function rotc_instagram_token(): ?string {
         @chmod($stateFile, 0600);
     }
     return $state['token'];
+}
+
+function rotc_instagram_is_fb_token(string $token): bool {
+    return strncmp($token, 'EAA', 3) === 0;
+}
+
+/**
+ * For a Facebook-login token: the Instagram account id linked to the Page.
+ * A Page token answers /me directly; a user token lists its Pages, and we
+ * take the one whose Instagram username matches the handle (else the first
+ * Page that has an Instagram account). Cached for a day.
+ */
+function rotc_instagram_fb_account_id(string $token): ?string {
+    $cacheFile = sys_get_temp_dir() . '/rotc-wp-cache/instagram-fbid-' . substr(hash('sha256', $token), 0, 16) . '.txt';
+    if (file_exists($cacheFile) && time() - filemtime($cacheFile) < 86400) {
+        $id = trim((string) file_get_contents($cacheFile));
+        if ($id !== '') return $id;
+    }
+    $f = 'instagram_business_account{id,username}';
+    $id = null;
+    $me = rotc_instagram_http_get(ROTC_FB_API . '/me?fields=' . rawurlencode($f) . '&access_token=' . rawurlencode($token));
+    if (!empty($me['instagram_business_account']['id'])) {
+        $id = (string) $me['instagram_business_account']['id'];
+    } else {
+        $pages = rotc_instagram_http_get(ROTC_FB_API . '/me/accounts?fields=' . rawurlencode($f) . '&limit=100&access_token=' . rawurlencode($token));
+        foreach (($pages['data'] ?? []) as $pg) {
+            $ig = $pg['instagram_business_account'] ?? null;
+            if (empty($ig['id'])) continue;
+            if ($id === null) $id = (string) $ig['id'];
+            if (strcasecmp((string) ($ig['username'] ?? ''), rotc_instagram_handle()) === 0) { $id = (string) $ig['id']; break; }
+        }
+    }
+    if ($id === null) {
+        error_log('instagram feed: this Facebook token has no Page with a linked Instagram professional account');
+        return null;
+    }
+    @file_put_contents($cacheFile, $id, LOCK_EX);
+    return $id;
 }
 
 /**
@@ -127,7 +172,14 @@ function rotc_fetch_instagram_posts(int $count = 9): array {
         $posts = null;
         if ($token !== null) {
             $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
-            $data = rotc_instagram_http_get(ROTC_IG_API . '/me/media?fields=' . $fields . '&limit=' . (int) $count . '&access_token=' . rawurlencode($token));
+            $q = '/media?fields=' . $fields . '&limit=' . (int) $count . '&access_token=' . rawurlencode($token);
+            $data = null;
+            if (rotc_instagram_is_fb_token($token)) {
+                $igId = rotc_instagram_fb_account_id($token);
+                if ($igId !== null) $data = rotc_instagram_http_get(ROTC_FB_API . '/' . rawurlencode($igId) . $q);
+            } else {
+                $data = rotc_instagram_http_get(ROTC_IG_API . '/me' . $q);
+            }
             if (isset($data['data']) && is_array($data['data'])) {
                 $posts = [];
                 foreach ($data['data'] as $m) {
