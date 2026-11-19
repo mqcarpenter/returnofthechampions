@@ -1,8 +1,8 @@
 <?php
 /**
  * templates/latest-transactions.php
- * "Latest Transactions" sidebar card, below the Top Free Agents/Draft
- * Trends tabbed widget (templates/free-agent-pulse.php). $latest_txns
+ * "Latest Transactions" sidebar card, below the Instagram/Top Free
+ * Agents tabbed widget (templates/free-agent-pulse.php). $latest_txns
  * comes from rotc_fetch_latest_transactions() in includes/transactions.php
  * -- rows already include 'badge'/'detailsHtml'/'franchiseName'
  * precomputed, detailsHtml already using the shared player hover card

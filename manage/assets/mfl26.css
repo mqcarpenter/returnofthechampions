@@ -429,6 +429,21 @@ a:hover{ color:var(--accent); }
 .rotc-sidefeed-item .title:hover{ color:var(--accent); }
 .rotc-sidefeed-item .desc{ font-size:12px; line-height:1.5; color:var(--muted); }
 
+/* Instagram tab (templates/free-agent-pulse.php): @handle + Follow, then a
+   3-across grid of square post thumbnails linking out to Instagram. */
+.rotc-ig-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px 8px; }
+.rotc-ig-handle{ font-weight:700; font-size:13px; color:var(--ink); }
+.rotc-ig-follow{ display:inline-block; background:var(--accent); color:#fff; font-weight:700; font-size:11px; letter-spacing:.04em; text-transform:uppercase; padding:5px 10px; border-radius:4px; }
+.rotc-ig-follow:hover{ color:#fff; filter:brightness(.92); }
+.rotc-ig-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; padding:0 3px; }
+.rotc-ig-tile{ position:relative; display:block; aspect-ratio:1/1; overflow:hidden; background:var(--sand); }
+.rotc-ig-tile img{ width:100%; height:100%; object-fit:cover; display:block; transition:transform .2s ease; }
+.rotc-ig-tile:hover img, .rotc-ig-tile:focus-visible img{ transform:scale(1.05); }
+.rotc-ig-badge{ position:absolute; top:5px; right:6px; color:#fff; font-size:12px; line-height:1; text-shadow:0 1px 3px rgba(0,0,0,.6); pointer-events:none; }
+.rotc-ig-more{ padding:10px 14px 8px; text-align:right; }
+.rotc-ig-more a{ font-size:12px; color:var(--muted); }
+.rotc-ig-more a:hover{ color:var(--accent); }
+
 /* ---- 11. FOOTER (rotc-foot) — unchanged from MFL version --- */
 .rotc-foot{ --fline:rgba(255,255,255,.12); --fmuted:#B7A99B; font-family:"Roboto",Arial,sans-serif; background:var(--ink); color:var(--paper); border-top:3px solid var(--accent); margin-top:24px; }
 .rotc-foot *{ box-sizing:border-box; }

@@ -6,7 +6,7 @@
  * spotlight, Fantasy Recap
  * (interactive hero+list hub -- commented out at season start, see
  * below), and Final NFL Scores in the main column; Smack Feed / Top
- * Adds-Drops tabs plus the Top Free Agents/Draft Trends tabbed widget
+ * Adds-Drops tabs plus the Instagram/Top Free Agents tabbed widget
  * in the sidebar. The old "Monday Report" and "Fantasy Preview"
  * placeholder cards were removed per Matteo's call -- neither was ever
  * wired to real data (Monday Report had no data source at all; Preview
@@ -183,14 +183,18 @@ const ROTC_HOME_NFL_ABBR = [
 
   <aside class="home-sidebar">
     <?php
-    // Player stats (Top Free Agents / Draft Trends) now runs ABOVE Smack
-    // Feed per Matteo's call -- was the reverse order before.
+    // Instagram / Top Free Agents tabs run ABOVE Smack Feed per Matteo's
+    // call. Instagram (@returnofthechampions) is the primary, open tab; it
+    // replaced Draft Trends. It doesn't need MFL, so it shows even without
+    // config.php (as a Follow card until a token is set).
+    require_once __DIR__ . '/includes/instagram-feed.php';
+    $instagram_posts = rotc_fetch_instagram_posts(9);
+    $top_free_agents = [];
     if ($hasConfig) {
         require_once __DIR__ . '/includes/free-agent-pulse.php';
         $top_free_agents = rotc_fetch_top_free_agents(20);
-        $adp_trends = rotc_fetch_adp_trends(20);
-        include __DIR__ . '/templates/free-agent-pulse.php';
     }
+    include __DIR__ . '/templates/free-agent-pulse.php';
 
     require_once __DIR__ . '/includes/smack-feed.php';
     $fetchedSmack = rotc_fetch_smack_items(6);
