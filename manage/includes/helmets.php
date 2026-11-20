@@ -12,14 +12,12 @@
  * Keep both mappings in sync if a franchise's art or ID changes.
  */
 
-// Transparent, resized art (2026-08-24). The previous
-// img/img/helmetsfinished/ set was white-background JPEGs that needed a
-// light plate to sit on any dark surface, and two files (EH, JP) were
-// 2048px+ PNGs weighing ~4MB EACH -- the full 16-helmet set was 8.8MB.
-// These are alpha PNGs capped at 300px: the same set is now ~1MB, and
-// helmets composite cleanly on light or dark without a backing plate.
-// The old files are still in place; nothing points at them.
-const ROTC_HELMET_BASE = 'https://www.returnofthechampions.com/img/helmets-optimized/';
+// Transparent, defringed & matte-cleaned helmet art (version-controlled in
+// manage/assets/img/helmets/ so deploys via git pull update every page
+// automatically and bust old /img/helmets-optimized/ browser caches).
+// All 35 PNGs have white-matte edge decontamination and transparent
+// facemask cutouts so they composite cleanly on both light and dark cards.
+const ROTC_HELMET_BASE = 'https://www.returnofthechampions.com/manage/assets/img/helmets/';
 
 const ROTC_HELMET_PREFIX = [
     '0001' => 'AOH', '0002' => 'CB',  '0003' => 'DB',  '0004' => 'KK',

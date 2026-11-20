@@ -27,9 +27,8 @@
   var TICKER_ENDPOINT = '<?= $base ?>/api/matchup-ticker.php';
   // Start fetching immediately rather than waiting for DOMContentLoaded.
   var tickerPromise = fetch(TICKER_ENDPOINT).then(function(r){ return r.json(); });
-  // Kept in sync with ROTC_HELMET_BASE in includes/helmets.php -- see the
-  // note there on why the art moved and why these are .png.
-  var HELMET_BASE = 'https://www.returnofthechampions.com/img/helmets-optimized/';
+  // Kept in sync with ROTC_HELMET_BASE in includes/helmets.php.
+  var HELMET_BASE = 'https://www.returnofthechampions.com/manage/assets/img/helmets/';
   // Franchise ID -> team prefix used to build helmet image filenames.
   var HELMETS = {
     '0001':'AOH','0002':'CB','0003':'DB','0004':'KK','0005':'FEC','0006':'SW',
