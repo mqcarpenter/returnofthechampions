@@ -29,7 +29,9 @@ function rotc_wp_cached_get(string $url, int $ttlSeconds): ?string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT        => 5,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => 'ROTC-HeroCarousel/1.0',
     ]);
     $body = curl_exec($ch);
@@ -37,7 +39,7 @@ function rotc_wp_cached_get(string $url, int $ttlSeconds): ?string {
     curl_close($ch);
 
     if ($ok) {
-        @file_put_contents($cacheFile, $body);
+        @file_put_contents($cacheFile, $body, LOCK_EX);
         return $body;
     }
 
@@ -51,8 +53,26 @@ function rotc_wp_cached_get(string $url, int $ttlSeconds): ?string {
  * showing the newest 5, for instance).
  */
 function rotc_fetch_hero_slides(int $count = 5, string $fallbackImage = '', int $offset = 0): array {
+    static $mem = [];
+    $memKey = $count . '|' . $offset . '|' . $fallbackImage;
+    if (isset($mem[$memKey])) return $mem[$memKey];
+
     $wpBase = getenv('ROTC_WP_BASE') ?: 'https://returnofthechampions.com';
     $url = rtrim($wpBase, '/') . '/wp-json/wp/v2/posts?per_page=' . $count . '&offset=' . $offset . '&_embed=1';
+
+    $cacheDir = sys_get_temp_dir() . '/rotc-wp-cache';
+    if (!is_dir($cacheDir)) @mkdir($cacheDir, 0700, true);
+    $parsedFile = $cacheDir . '/hero-parsed-' . md5($url . '|' . $fallbackImage) . '.ser';
+    if (is_file($parsedFile) && (time() - filemtime($parsedFile)) < 300) {
+        $raw = @file_get_contents($parsedFile);
+        if ($raw !== false && $raw !== '') {
+            $cachedSlides = @unserialize($raw, ['allowed_classes' => false]);
+            if (is_array($cachedSlides)) {
+                $mem[$memKey] = $cachedSlides;
+                return $cachedSlides;
+            }
+        }
+    }
 
     $body = rotc_wp_cached_get($url, 300);
     if ($body === null) return [];
@@ -70,9 +90,6 @@ function rotc_fetch_hero_slides(int $count = 5, string $fallbackImage = '', int 
                 ?? $media['media_details']['sizes']['medium_large']['source_url']
                 ?? $media['source_url']
                 ?? $fallbackImage;
-            // Small grid tiles don't need a full "large" image -- a real
-            // small size keeps the page lighter than serving the same
-            // big file everywhere and letting CSS scale it down.
             $thumb = $media['media_details']['sizes']['medium']['source_url']
                 ?? $media['media_details']['sizes']['thumbnail']['source_url']
                 ?? $image;
@@ -89,5 +106,9 @@ function rotc_fetch_hero_slides(int $count = 5, string $fallbackImage = '', int 
         ];
     }
 
+    if ($slides) {
+        @file_put_contents($parsedFile, serialize($slides), LOCK_EX);
+    }
+    $mem[$memKey] = $slides;
     return $slides;
 }

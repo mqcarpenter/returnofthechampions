@@ -41,6 +41,15 @@ if (!$fetchError) {
     require_once __DIR__ . '/../includes/pool-accuracy.php';
     require_once __DIR__ . '/../includes/weekly-recap.php'; // rotc_current_recap_week()
 
+    // Prefetch all independent standings + pool + full NFL schedule calls concurrently.
+    $curYear = (int) MFL_YEAR;
+    mfl_prefetch([
+        ['type' => 'league',          'year' => $curYear, 'ttl' => 86400, 'params' => []],
+        ['type' => 'leagueStandings', 'year' => $curYear, 'ttl' => 300,   'params' => ['ALL' => 1]],
+        ['type' => 'survivorPool',    'year' => $curYear, 'ttl' => 3600,  'params' => []],
+        ['type' => 'nflSchedule',     'year' => $curYear, 'ttl' => 1800,  'params' => ['W' => 'ALL'], 'includeLeague' => false],
+    ]);
+
     $franchises = mfl_franchises();
     $divisions  = mfl_divisions_conferences();
 
@@ -81,18 +90,32 @@ if (!$fetchError) {
     // an NFL game does (gameSecondsRemaining), so grading Fantasy Pick 'Em
     // picks piggybacks on the same real-kickoff-timestamp completion
     // check the recap feature already trusts.
-    $currentCompleted = rotc_current_recap_week((int) MFL_YEAR);
+    $currentCompleted = rotc_current_recap_week($curYear);
     $lastFinalWeek = $currentCompleted ? $currentCompleted['week'] : 0;
+
+    // Only fetch weeklyResults for weeks that are actually completed (future
+    // unplayed weeks have no final scores to grade), and prefetch them in
+    // parallel instead of sequentially.
+    $allWeeksNeeded = array_unique(array_merge($poolWeeks, $survivorWeeks));
+    $wrReqs = [];
+    foreach ($allWeeksNeeded as $w) {
+        if ($w <= $lastFinalWeek) {
+            $wrReqs[] = ['type' => 'weeklyResults', 'year' => $curYear, 'ttl' => 86400, 'params' => ['W' => $w]];
+        }
+    }
+    if ($wrReqs) mfl_prefetch($wrReqs);
 
     // Per-week score lookups, fetched once and reused across every
     // franchise's row for that week rather than once per franchise.
     $nflWeekScores = [];
     $nflWeekOpponents = [];
     $fantasyWeekScores = [];
-    foreach (array_unique(array_merge($poolWeeks, $survivorWeeks)) as $w) {
-        $nflWeekScores[$w] = rotc_nfl_week_scores((int) MFL_YEAR, $w);
-        $nflWeekOpponents[$w] = rotc_nfl_week_opponents((int) MFL_YEAR, $w);
-        $fantasyWeekScores[$w] = rotc_fantasy_week_scores((int) MFL_YEAR, $w, $w <= $lastFinalWeek);
+    foreach ($allWeeksNeeded as $w) {
+        $nflWeekScores[$w] = rotc_nfl_week_scores($curYear, $w);
+        $nflWeekOpponents[$w] = rotc_nfl_week_opponents($curYear, $w);
+        $fantasyWeekScores[$w] = ($w <= $lastFinalWeek)
+            ? rotc_fantasy_week_scores($curYear, $w, true)
+            : [];
     }
 
 }

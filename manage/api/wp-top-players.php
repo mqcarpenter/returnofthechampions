@@ -43,6 +43,15 @@ $tabs = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 $out = ['year' => (int) MFL_YEAR, 'positions' => $tabs, 'players' => array_fill_keys($tabs, [])];
 
 try {
+    mfl_prefetch([
+        ['type' => 'playerScores', 'ttl' => 1800,  'params' => ['W' => 'YTD', 'COUNT' => 300]],
+        ['type' => 'playerScores', 'ttl' => 1800,  'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+        ['type' => 'players',      'ttl' => 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+        ['type' => 'rosters',      'ttl' => 1800,  'params' => []],
+        ['type' => 'nflByeWeeks',  'ttl' => 86400, 'params' => [], 'includeLeague' => false],
+        ['type' => 'injuries',     'ttl' => 1800,  'params' => [], 'includeLeague' => false],
+    ]);
+
     // COUNT=300 so every position tab still has 10 entries after the
     // overall list is split up (QBs/TEs sit well below the RB/WR cluster).
     $raw = mfl_cached_get('playerScores', 1800, ['W' => 'YTD', 'COUNT' => 300]);
@@ -50,11 +59,7 @@ try {
     $list = array_values(array_filter($list, fn($r) => !empty($r['id']) && $r['score'] !== ''));
     usort($list, fn($a, $b) => (float) $b['score'] <=> (float) $a['score']);
 
-    $details = [];
-    foreach (array_chunk(array_column($list, 'id'), 250) as $chunk) {
-        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) $details[$p['id']] = $p;
-    }
+    $details = rotc_resolve_players(array_column($list, 'id'), null, true);
 
     $owners = rotc_owner_map();
     $ranks  = rotc_season_rank_map();

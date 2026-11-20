@@ -17,7 +17,7 @@
  * stylesheet, but not required for parity.
  */
 ?>
-<div id="rotc-ticker-wrap" style="position:relative;background:#ffffff;border-bottom:1px solid #e2e3e5;">
+<div id="rotc-ticker-wrap" style="position:relative;background:#ffffff;border-bottom:1px solid #e2e3e5;min-height:48px;">
   <button type="button" id="rotc-ticker-prev" aria-label="Scroll matchups left" style="position:absolute;left:0;top:0;bottom:0;width:26px;background:linear-gradient(90deg,#ffffff 40%,rgba(255,255,255,0));border:none;cursor:pointer;font-size:18px;font-weight:700;color:#6d6e73;z-index:3;">‹</button>
   <div id="rotc-matchup-ticker" style="overflow-x:auto;-webkit-overflow-scrolling:touch;"></div>
   <button type="button" id="rotc-ticker-next" aria-label="Scroll matchups right" style="position:absolute;right:0;top:0;bottom:0;width:26px;background:linear-gradient(270deg,#ffffff 40%,rgba(255,255,255,0));border:none;cursor:pointer;font-size:18px;font-weight:700;color:#6d6e73;z-index:3;">›</button>
@@ -25,6 +25,8 @@
 <script>
 (function(){
   var TICKER_ENDPOINT = '<?= $base ?>/api/matchup-ticker.php';
+  // Start fetching immediately rather than waiting for DOMContentLoaded.
+  var tickerPromise = fetch(TICKER_ENDPOINT).then(function(r){ return r.json(); });
   // Kept in sync with ROTC_HELMET_BASE in includes/helmets.php -- see the
   // note there on why the art moved and why these are .png.
   var HELMET_BASE = 'https://www.returnofthechampions.com/img/helmets-optimized/';
@@ -74,16 +76,15 @@
     var container = document.getElementById('rotc-matchup-ticker');
     if (!container) return;
     try {
-      var res = await fetch(TICKER_ENDPOINT);
-      var data = await res.json();
+      var data = await tickerPromise;
       if (data.error) throw new Error(data.message || 'ticker endpoint error');
 
       var chips = data.matchups.map(function(m, idx) {
         var leftId = m.home.id, rightId = m.away.id;
         var leftPrefix = HELMETS[leftId];
         var rightPrefix = HELMETS[rightId];
-        var leftImg = leftPrefix ? '<img src="' + helmetSrc(leftPrefix,'left') + '" style="width:26px;height:auto;flex-shrink:0;' + helmetStyle(leftPrefix,'left') + '">' : placeholderImg();
-        var rightImg = rightPrefix ? '<img src="' + helmetSrc(rightPrefix,'right') + '" style="width:26px;height:auto;flex-shrink:0;' + helmetStyle(rightPrefix,'right') + '">' : placeholderImg();
+        var leftImg = leftPrefix ? '<img src="' + helmetSrc(leftPrefix,'left') + '" width="26" height="26" decoding="async" style="width:26px;height:auto;flex-shrink:0;' + helmetStyle(leftPrefix,'left') + '">' : placeholderImg();
+        var rightImg = rightPrefix ? '<img src="' + helmetSrc(rightPrefix,'right') + '" width="26" height="26" decoding="async" style="width:26px;height:auto;flex-shrink:0;' + helmetStyle(rightPrefix,'right') + '">' : placeholderImg();
         var scoreHtml;
         if (data.mode === 'live') {
           var ls = m.homeScore || 0, rs = m.awayScore || 0;

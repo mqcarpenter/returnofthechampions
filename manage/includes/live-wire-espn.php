@@ -60,7 +60,9 @@ function rotc_lw_espn_get(string $url, int $ttl): ?array {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_TIMEOUT        => 6,     // a garnish must never stall the page
+            CURLOPT_ENCODING       => '',
             CURLOPT_FOLLOWLOCATION => true,
             // site.api.espn.com is the endpoint espn.com's own front-end
             // calls from the browser, not a documented public API -- it

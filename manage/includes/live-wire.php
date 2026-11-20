@@ -209,19 +209,16 @@ function rotc_lw_build(array $matchupsRaw, int $week, float $progress = 0.0,
 
     $franchises = mfl_franchises();
 
-    // Player metadata. One cached full-DB call; DETAILS=1 is what surfaces
-    // espn_id, which is how the draft board already does headshots.
+    // Player metadata from the shared derived player DB index (0 extra JSON decodes).
     $meta = [];
-    $allRaw = mfl_cached_get('players', 86400, ['DETAILS' => 1], false);
-    foreach (mfl_normalize_list($allRaw['players']['player'] ?? null) as $p) {
-        if (empty($p['id'])) continue;
+    foreach (rotc_all_players_map(null, true) as $pid => $p) {
         $name = (string) ($p['name'] ?? '');
         if (strpos($name, ',') !== false) {
             [$last, $first] = array_map('trim', explode(',', $name, 2));
             $name = "$first $last";
         }
-        $meta[$p['id']] = ['name' => $name, 'pos' => $p['position'] ?? '',
-                           'team' => $p['team'] ?? '', 'espn' => $p['espn_id'] ?? ''];
+        $meta[$pid] = ['name' => $name, 'pos' => $p['position'] ?? '',
+                       'team' => $p['team'] ?? '', 'espn' => $p['espn_id'] ?? ''];
     }
 
     $proj = [];

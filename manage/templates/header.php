@@ -25,7 +25,8 @@ require_once __DIR__ . '/nav-data.php';
 <title><?= $page_title ?? 'Return of the Champions' ?></title>
 <?php $appTitle = 'ROTC'; include __DIR__ . '/app-icons.php'; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700|Roboto+Condensed:400,700|Roboto:400,400i,700" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700|Roboto+Condensed:400,700|Roboto:400,400i,700&amp;display=swap" rel="stylesheet">
 <?php $cssVer = @filemtime(__DIR__ . '/../assets/mfl26.css') ?: time(); ?>
 <link rel="stylesheet" href="<?= $base ?>/assets/mfl26.css?v=<?= $cssVer ?>">
 </head>

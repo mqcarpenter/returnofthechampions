@@ -60,7 +60,23 @@ $fetchError = ($db === null);
 $data = [];
 $recentSeason = null;
 
-if (!$fetchError) {
+// Cache the ~20 immutable historical leaderboard queries for 1 hour so the
+// Records Hub doesn't re-scan 22 seasons of UNION ALL tables on every view.
+$rotcHistCacheDir  = sys_get_temp_dir() . '/rotc-mfl-cache';
+$rotcHistCacheFile = $rotcHistCacheDir . '/derived-history-hub-v1.ser';
+$rotcHistCached    = null;
+if (!$fetchError && empty($_GET['refresh']) && is_file($rotcHistCacheFile) && (time() - filemtime($rotcHistCacheFile)) < 3600) {
+    $raw = @file_get_contents($rotcHistCacheFile);
+    if ($raw !== false && $raw !== '') {
+        $un = @unserialize($raw, ['allowed_classes' => false]);
+        if (is_array($un) && isset($un['data'])) $rotcHistCached = $un;
+    }
+}
+
+if (!$fetchError && $rotcHistCached !== null) {
+    $recentSeason = $rotcHistCached['recentSeason'];
+    $data         = $rotcHistCached['data'];
+} elseif (!$fetchError) {
     // Only count a season as "current" once at least one game in it has a
     // real (non-zero) score on either side. MFL creates next season's league
     // shell (with a copied schedule) well before it's played, and an
@@ -286,43 +302,62 @@ function rotc_h2h_helmet(?int $franchiseId, array $mflIdMap): ?string {
 }
 
 if (!$fetchError) {
-    $h2hFranchiseList = $db->query("SELECT id, current_name FROM rotchist_franchises ORDER BY current_name")->fetchAll();
-    foreach ($h2hFranchiseList as $f) { $h2hNamesById[(int) $f['id']] = $f['current_name']; }
+    if ($rotcHistCached !== null && isset($rotcHistCached['h2hFranchiseList'])) {
+        $h2hFranchiseList    = $rotcHistCached['h2hFranchiseList'];
+        $h2hNamesById        = $rotcHistCached['h2hNamesById'];
+        $h2hMflIdByFranchise = $rotcHistCached['h2hMflIdByFranchise'];
+        $h2hMostPlayed       = $rotcHistCached['h2hMostPlayed'];
+        $h2hClosestRivalries = $rotcHistCached['h2hClosestRivalries'];
+    } else {
+        $h2hFranchiseList = $db->query("SELECT id, current_name FROM rotchist_franchises ORDER BY current_name")->fetchAll();
+        foreach ($h2hFranchiseList as $f) { $h2hNamesById[(int) $f['id']] = $f['current_name']; }
 
-    // Helmet art keys off the CURRENT season's MFL franchise id (see
-    // includes/helmets.php), so resolve stable rotchist_franchises.id ->
-    // this-season mfl_franchise_id once, using the most recent real season
-    // already computed above ($recentSeason), falling back to the latest
-    // season on record if that's somehow unset.
-    $h2hHelmetSeason = $recentSeason ?? (int) $db->query("SELECT MAX(season) FROM rotchist_mfl_franchises")->fetchColumn();
-    if ($h2hHelmetSeason) {
-        $stmt = $db->prepare("SELECT franchise_id, mfl_franchise_id FROM rotchist_mfl_franchises WHERE season = :season AND franchise_id IS NOT NULL");
-        $stmt->execute(['season' => $h2hHelmetSeason]);
-        foreach ($stmt->fetchAll() as $row) {
-            $h2hMflIdByFranchise[(int) $row['franchise_id']] = $row['mfl_franchise_id'];
+        // Helmet art keys off the CURRENT season's MFL franchise id (see
+        // includes/helmets.php), so resolve stable rotchist_franchises.id ->
+        // this-season mfl_franchise_id once, using the most recent real season
+        // already computed above ($recentSeason), falling back to the latest
+        // season on record if that's somehow unset.
+        $h2hHelmetSeason = $recentSeason ?? (int) $db->query("SELECT MAX(season) FROM rotchist_mfl_franchises")->fetchColumn();
+        if ($h2hHelmetSeason) {
+            $stmt = $db->prepare("SELECT franchise_id, mfl_franchise_id FROM rotchist_mfl_franchises WHERE season = :season AND franchise_id IS NOT NULL");
+            $stmt->execute(['season' => $h2hHelmetSeason]);
+            foreach ($stmt->fetchAll() as $row) {
+                $h2hMflIdByFranchise[(int) $row['franchise_id']] = $row['mfl_franchise_id'];
+            }
         }
+
+        // Rivalries -- every unique pair that has ever played, canonicalized via
+        // LEAST/GREATEST so a franchise pair only shows up once regardless of
+        // which side was "franchise1" in a given game.
+        $h2hRivalries = $db->query("
+            SELECT LEAST(franchise1_id, franchise2_id) AS fa, GREATEST(franchise1_id, franchise2_id) AS fb,
+                   COUNT(*) AS games,
+                   AVG(ABS(franchise1_score - franchise2_score)) AS avg_margin,
+                   MAX(season) AS last_season
+            FROM rotchist_mfl_games
+            WHERE franchise1_id IS NOT NULL AND franchise2_id IS NOT NULL
+              AND franchise1_score IS NOT NULL AND franchise2_score IS NOT NULL
+            GROUP BY fa, fb
+        ")->fetchAll();
+
+        usort($h2hRivalries, fn($a, $b) => (int) $b['games'] <=> (int) $a['games']);
+        $h2hMostPlayed = array_slice($h2hRivalries, 0, 8);
+
+        $h2hEligibleForClosest = array_values(array_filter($h2hRivalries, fn($r) => (int) $r['games'] >= 5));
+        usort($h2hEligibleForClosest, fn($a, $b) => (float) $a['avg_margin'] <=> (float) $b['avg_margin']);
+        $h2hClosestRivalries = array_slice($h2hEligibleForClosest, 0, 8);
+
+        if (!is_dir($rotcHistCacheDir)) @mkdir($rotcHistCacheDir, 0700, true);
+        @file_put_contents($rotcHistCacheFile, serialize([
+            'recentSeason'        => $recentSeason,
+            'data'                => $data,
+            'h2hFranchiseList'    => $h2hFranchiseList,
+            'h2hNamesById'        => $h2hNamesById,
+            'h2hMflIdByFranchise' => $h2hMflIdByFranchise,
+            'h2hMostPlayed'       => $h2hMostPlayed,
+            'h2hClosestRivalries' => $h2hClosestRivalries,
+        ]), LOCK_EX);
     }
-
-    // Rivalries -- every unique pair that has ever played, canonicalized via
-    // LEAST/GREATEST so a franchise pair only shows up once regardless of
-    // which side was "franchise1" in a given game.
-    $h2hRivalries = $db->query("
-        SELECT LEAST(franchise1_id, franchise2_id) AS fa, GREATEST(franchise1_id, franchise2_id) AS fb,
-               COUNT(*) AS games,
-               AVG(ABS(franchise1_score - franchise2_score)) AS avg_margin,
-               MAX(season) AS last_season
-        FROM rotchist_mfl_games
-        WHERE franchise1_id IS NOT NULL AND franchise2_id IS NOT NULL
-          AND franchise1_score IS NOT NULL AND franchise2_score IS NOT NULL
-        GROUP BY fa, fb
-    ")->fetchAll();
-
-    usort($h2hRivalries, fn($a, $b) => (int) $b['games'] <=> (int) $a['games']);
-    $h2hMostPlayed = array_slice($h2hRivalries, 0, 8);
-
-    $h2hEligibleForClosest = array_values(array_filter($h2hRivalries, fn($r) => (int) $r['games'] >= 5));
-    usort($h2hEligibleForClosest, fn($a, $b) => (float) $a['avg_margin'] <=> (float) $b['avg_margin']);
-    $h2hClosestRivalries = array_slice($h2hEligibleForClosest, 0, 8);
 
     // A specific pairing, selected via ?teamA=..&teamB=.. on this same page.
     if ($h2hTeamA && $h2hTeamB && $h2hTeamA !== $h2hTeamB && isset($h2hNamesById[$h2hTeamA]) && isset($h2hNamesById[$h2hTeamB])) {

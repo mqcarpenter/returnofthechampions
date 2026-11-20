@@ -45,7 +45,26 @@ if ($hasConfig) {
     require_once __DIR__ . '/includes/transactions.php';
     require_once __DIR__ . '/includes/auction.php';
 
-    $current = rotc_current_recap_week((int) MFL_YEAR);
+    // Prefetch independent front-page MFL endpoints concurrently so a cold
+    // or partially-expired cache resolves in ~1 RTT instead of 15+ sequential calls.
+    $curYear = (int) MFL_YEAR;
+    mfl_prefetch([
+        ['type' => 'league',          'year' => $curYear, 'ttl' => 86400, 'params' => []],
+        ['type' => 'nflSchedule',     'year' => $curYear, 'ttl' => 1800,  'params' => ['W' => 'ALL'], 'includeLeague' => false],
+        ['type' => 'topAdds',         'year' => $curYear, 'ttl' => 1800,  'params' => ['COUNT' => 15], 'includeLeague' => false],
+        ['type' => 'topDrops',        'year' => $curYear, 'ttl' => 1800,  'params' => ['COUNT' => 15], 'includeLeague' => false],
+        ['type' => 'transactions',    'year' => $curYear, 'ttl' => 900,   'params' => ['TRANS_TYPE' => 'DEFAULT', 'COUNT' => 100]],
+        ['type' => 'freeAgents',      'year' => $curYear, 'ttl' => 900,   'params' => []],
+        ['type' => 'projectedScores', 'year' => $curYear, 'ttl' => 3600,  'params' => ['W' => 1, 'COUNT' => 3000]],
+        ['type' => 'rosters',         'year' => $curYear, 'ttl' => 1800,  'params' => []],
+        ['type' => 'injuries',        'year' => $curYear, 'ttl' => 1800,  'params' => [], 'includeLeague' => false],
+        ['type' => 'nflByeWeeks',     'year' => $curYear, 'ttl' => 86400, 'params' => [], 'includeLeague' => false],
+        ['type' => 'players',         'year' => $curYear, 'ttl' => 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+        ['type' => 'playerScores',    'year' => $curYear, 'ttl' => 1800,  'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+        ['type' => 'auctionResults',  'year' => $curYear, 'ttl' => 600,   'params' => []],
+    ]);
+
+    $current = rotc_current_recap_week($curYear);
     if ($current) {
         $recapYear = $current['year'];
         $recapWeek = $current['week'];
@@ -56,15 +75,19 @@ if ($hasConfig) {
 
     $recap = rotc_weekly_recap_article($recapYear, $recapWeek);
 
-    $nflRaw = mfl_cached_get_year('nflSchedule', $recapYear, 1800, ['W' => $recapWeek], false);
-    $nflGames = mfl_normalize_list($nflRaw['nflSchedule']['matchup'] ?? null);
+    $allNflWeeks = rotc_nfl_schedule_all_weeks($recapYear, 1800);
+    if (isset($allNflWeeks[$recapWeek])) {
+        $nflGames = $allNflWeeks[$recapWeek];
+    } else {
+        $nflRaw = mfl_cached_get_year('nflSchedule', $recapYear, 1800, ['W' => $recapWeek], false);
+        $nflGames = mfl_normalize_list($nflRaw['nflSchedule']['matchup'] ?? null);
+    }
 
     $trending_adds = rotc_fetch_trending('topAdds', 15);
     $trending_drops = rotc_fetch_trending('topDrops', 15);
 
     $franchises = mfl_franchises();
-    $hofChampions = rotc_hall_of_fame_champions(2017, (int) MFL_YEAR);
-    if ($hofChampions) $hofChampion = $hofChampions[0];
+    $hofChampion = rotc_reigning_champion($curYear, 2017);
 
     $latest_txns = rotc_fetch_latest_transactions(10);
 }
@@ -108,15 +131,17 @@ const ROTC_HOME_NFL_ABBR = [
 
     <?php
     require_once __DIR__ . '/includes/wp-hero-feed.php';
-    $fetchedSlides = rotc_fetch_hero_slides(5, $base . '/assets/hero/placeholder-1.jpg');
+    // Fetch carousel (5) + More News (8) in a single WP REST request instead
+    // of two separate roundtrips, then slice in memory.
+    $allWpPosts = rotc_fetch_hero_slides(13, $base . '/assets/hero/placeholder-1.jpg', 0);
+    $fetchedSlides = array_slice($allWpPosts, 0, 5);
     if ($fetchedSlides) { $slides = $fetchedSlides; }
     include __DIR__ . '/templates/hero-carousel.php';
 
     // "Past articles" river below the carousel, real-news-site style --
-    // offset=5 so this never repeats whatever the carousel above is
-    // already showing (same data source, same shape, see
-    // templates/news-grid.php's doc comment).
-    $newsArticles = rotc_fetch_hero_slides(8, $base . '/assets/hero/placeholder-1.jpg', 5);
+    // sliced at offset 5 so this never repeats whatever the carousel above
+    // is already showing.
+    $newsArticles = array_slice($allWpPosts, 5, 8);
     if ($newsArticles):
     ?>
     <div class="card">

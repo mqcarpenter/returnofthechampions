@@ -56,13 +56,27 @@ function rotc_session_start(): void {
     }
 }
 
-function rotc_mfl_logged_in(): bool {
+/**
+ * Opens an existing PHP session ONLY if the browser sent a session cookie
+ * (or a session is already loaded in memory). Avoids creating empty session
+ * files, emitting Set-Cookie / Cache-Control: no-store headers, and holding
+ * session file locks for anonymous visitors.
+ */
+function rotc_session_start_if_exists(): bool {
+    if (session_status() === PHP_SESSION_ACTIVE) return true;
+    if (isset($_SESSION) && is_array($_SESSION) && !empty($_SESSION)) return true;
+    if (empty($_COOKIE[session_name()])) return false;
     rotc_session_start();
+    return true;
+}
+
+function rotc_mfl_logged_in(): bool {
+    if (!rotc_session_start_if_exists()) return false;
     return !empty($_SESSION['rotc_mfl_cookie_name']) && !empty($_SESSION['rotc_mfl_cookie_value']);
 }
 
 function rotc_mfl_username(): ?string {
-    rotc_session_start();
+    if (!rotc_session_start_if_exists()) return null;
     return $_SESSION['rotc_mfl_username'] ?? null;
 }
 
@@ -73,7 +87,7 @@ function rotc_mfl_username(): ?string {
  * roster/lineup/trade to act on.
  */
 function rotc_mfl_franchise_id(): ?string {
-    rotc_session_start();
+    if (!rotc_session_start_if_exists()) return null;
     return $_SESSION['rotc_mfl_franchise_id'] ?? null;
 }
 
@@ -89,13 +103,14 @@ function rotc_mfl_logout(): void {
 
 /** CSRF token for every form that POSTs to a write action. */
 function rotc_csrf_token(): string {
+    if (!empty($_SESSION['rotc_csrf'])) return $_SESSION['rotc_csrf'];
     rotc_session_start();
     if (empty($_SESSION['rotc_csrf'])) $_SESSION['rotc_csrf'] = bin2hex(random_bytes(32));
     return $_SESSION['rotc_csrf'];
 }
 
 function rotc_csrf_check(?string $token): bool {
-    rotc_session_start();
+    if (!rotc_session_start_if_exists()) return false;
     return !empty($_SESSION['rotc_csrf']) && is_string($token) && hash_equals($_SESSION['rotc_csrf'], $token);
 }
 
@@ -223,7 +238,9 @@ function rotc_mfl_authed_request(string $command, string $type, array $params = 
     $ch = curl_init("{$host}/{$year}/{$command}");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 4,
         CURLOPT_TIMEOUT        => 12,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => defined('MFL_USER_AGENT') ? MFL_USER_AGENT : 'ROTC26-Site',
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($fields),

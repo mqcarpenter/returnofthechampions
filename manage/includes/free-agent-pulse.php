@@ -32,16 +32,9 @@ function rotc_fetch_adp_period(string $period): array {
     return mfl_normalize_list($raw['adp']['player'] ?? null);
 }
 
-/** Batch-resolve full player bios (name/position/team/college/height/weight/espn_id) for a list of ids, chunked at 150 per MFL API call. DETAILS=1 needed for the hover card's photo + bio line. */
+/** Batch-resolve full player bios using the shared full-player-DB cache (0 extra HTTP calls on warm cache). */
 function rotc_fetch_players_by_id(array $ids): array {
-    $players = [];
-    foreach (array_chunk(array_values(array_unique($ids)), 150) as $chunk) {
-        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-            $players[$p['id']] = $p;
-        }
-    }
-    return $players;
+    return rotc_resolve_players($ids, null, true);
 }
 
 /**

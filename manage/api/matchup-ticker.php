@@ -36,8 +36,14 @@ if (!file_exists($configPath)) {
 require_once $configPath;
 require_once __DIR__ . '/../includes/mfl-api.php';
 header('Content-Type: application/json');
+header('Cache-Control: public, max-age=30');
 
 try {
+    mfl_prefetch([
+        ['type' => 'league',      'ttl' => 86400, 'params' => []],
+        ['type' => 'liveScoring', 'ttl' => 60,    'params' => []],
+    ]);
+
     $league = mfl_cached_get('league', 86400);
     if (!$league || empty($league['league']['franchises']['franchise'])) {
         throw new Exception('league export failed');

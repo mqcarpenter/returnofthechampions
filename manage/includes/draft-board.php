@@ -70,7 +70,8 @@ function rotc_draft_fetch_results(): array {
         $xmlUrl = "{$baseUrl}/fflnetdynamic{$year}/{$leagueId}_draft_results.xml";
         $ch = curl_init($xmlUrl);
         curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4,
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 4,
+            CURLOPT_ENCODING => '',
             CURLOPT_USERAGENT => defined('MFL_USER_AGENT') ? MFL_USER_AGENT : 'ROTC26-Site',
             CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2,
         ]);

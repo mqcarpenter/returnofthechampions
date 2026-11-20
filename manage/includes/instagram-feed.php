@@ -61,7 +61,9 @@ function rotc_instagram_http_get(string $url): ?array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT        => 5,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => 'ROTC-InstagramFeed/1.0',
     ]);
     $body = curl_exec($ch);

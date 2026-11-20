@@ -33,14 +33,18 @@
  * is checked per pick rather than gating the whole week on one flag.
  */
 function rotc_nfl_week_scores(int $year, int $week): array {
-    $raw = mfl_cached_get_year('nflSchedule', $year, 1800, ['W' => $week], false);
+    static $mem = [];
+    $key = $year . ':' . $week;
+    if (isset($mem[$key])) return $mem[$key];
+
+    $allWeeks = rotc_nfl_schedule_all_weeks($year, 1800);
+    $games = $allWeeks[$week] ?? null;
+    if ($games === null) {
+        $raw = mfl_cached_get_year('nflSchedule', $year, 1800, ['W' => $week], false);
+        $games = mfl_normalize_list($raw['nflSchedule']['matchup'] ?? null);
+    }
     $out = [];
-    foreach (mfl_normalize_list($raw['nflSchedule']['matchup'] ?? null) as $g) {
-        // MFL's own convention: gameSecondsRemaining counts down to 0 at
-        // the final whistle. A game that has not kicked off yet also
-        // omits real scores, so pairing "final" with a present numeric
-        // score (checked below) is enough to avoid a false final on a
-        // game that simply hasn't started.
+    foreach ($games as $g) {
         $final = (string) ($g['gameSecondsRemaining'] ?? '') === '0';
         foreach (mfl_normalize_list($g['team'] ?? null) as $t) {
             if (empty($t['id'])) continue;
@@ -50,6 +54,7 @@ function rotc_nfl_week_scores(int $year, int $week): array {
             ];
         }
     }
+    $mem[$key] = $out;
     return $out;
 }
 
@@ -155,14 +160,24 @@ function rotc_pool_weeks_by_number(array $franchiseNode): array {
  * matchup string the way the two pick'em pools do -- just the pick).
  */
 function rotc_nfl_week_opponents(int $year, int $week): array {
-    $raw = mfl_cached_get_year('nflSchedule', $year, 1800, ['W' => $week], false);
+    static $mem = [];
+    $key = $year . ':' . $week;
+    if (isset($mem[$key])) return $mem[$key];
+
+    $allWeeks = rotc_nfl_schedule_all_weeks($year, 1800);
+    $games = $allWeeks[$week] ?? null;
+    if ($games === null) {
+        $raw = mfl_cached_get_year('nflSchedule', $year, 1800, ['W' => $week], false);
+        $games = mfl_normalize_list($raw['nflSchedule']['matchup'] ?? null);
+    }
     $out = [];
-    foreach (mfl_normalize_list($raw['nflSchedule']['matchup'] ?? null) as $g) {
+    foreach ($games as $g) {
         $teams = mfl_normalize_list($g['team'] ?? null);
         if (count($teams) !== 2) continue;
         $out[$teams[0]['id']] = $teams[1]['id'];
         $out[$teams[1]['id']] = $teams[0]['id'];
     }
+    $mem[$key] = $out;
     return $out;
 }
 

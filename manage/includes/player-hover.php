@@ -58,9 +58,9 @@ function rotc_team_logo_url(?string $mflTeamCode): string {
 function rotc_team_logo_img(?string $mflTeamCode, int $size = 20): string {
     $url = rotc_team_logo_url($mflTeamCode);
     $alt = $mflTeamCode ?: 'FA';
-    return '<img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($alt) . '"'
+    return '<img class="rotc-team-logo" src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($alt) . '"'
         . ' width="' . $size . '" height="' . $size . '"'
-        . ' style="display:block;object-fit:contain;" loading="lazy"'
+        . ' loading="lazy" decoding="async"'
         . ' onerror="this.style.display=\'none\'">';
 }
 
@@ -192,13 +192,13 @@ function rotc_mfl_player_url(string $playerId): string {
 function rotc_mfl_player_link(?string $playerId): string {
     if (!$playerId) return '';
     $url = rotc_mfl_player_url($playerId);
+    // Icon is rendered via CSS .rotc-player-mfl-link::before and popup
+    // window is opened via a single delegated click handler in
+    // rotc_player_hover_widget() (target="_blank" acts as fallback).
     return ' <a href="' . htmlspecialchars($url) . '" class="rotc-player-mfl-link"'
          . ' title="Open this player on MFL (news + NFL stats)"'
          . ' aria-label="Open player on MFL"'
-         . ' target="_blank" rel="noopener"'
-         . ' onclick="window.open(this.href,\'rotc_mfl\',\'width=1200,height=900,resizable=yes,scrollbars=yes\'); return false;">'
-         . '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>'
-         . '</a>';
+         . ' target="_blank" rel="noopener"></a>';
 }
 
 /**
@@ -207,61 +207,57 @@ function rotc_mfl_player_link(?string $playerId): string {
  * pts', 'Bye Week' => '7']); blank/empty values are skipped.
  */
 function rotc_player_hover_span(string $displayName, ?array $pd, array $statLines = []): string {
-    $photo = rotc_espn_photo($pd);
+    $espnId = ($pd && !empty($pd['espn_id'])) ? (string) $pd['espn_id'] : '';
     $bio = implode(' · ', rotc_player_bio_bits($pd));
     $id = isset($pd['id']) ? (string) $pd['id'] : null;
 
-    // League context -- the "real data for THIS league" fields, built
-    // from rotc_owner_map()/rotc_season_rank_map()/rotc_bye_week_map()
-    // (includes/mfl-api.php), each fetched once per page load no matter
-    // how many player cards render. Shown ahead of whatever page-
-    // specific stat the caller passes in via $statLines, so every hover
-    // card leads with the same "who has them, how many points, ranked
-    // where, injury status" picture regardless of which page it's on.
+    // Fetch each request-scoped map once into a local variable to avoid
+    // repeated function-call overhead in tight loops (e.g. 432-row rosters).
     $leagueLines = [];
     if ($id !== null) {
-        $leagueLines['Fantasy Team'] = rotc_owner_map()[$id] ?? 'Free Agent';
-        $rank = rotc_season_rank_map()[$id] ?? null;
+        $owners = rotc_owner_map();
+        $ranks  = rotc_season_rank_map();
+        $byes   = rotc_bye_week_map();
+
+        $leagueLines['Fantasy Team'] = $owners[$id] ?? 'Free Agent';
+        $rank = $ranks[$id] ?? null;
         if ($rank) {
             $leagueLines[(string) MFL_YEAR . ' Total'] = number_format($rank['total'], 2) . ' pts';
             $pos = $pd['position'] ?? '';
             $leagueLines['Position Rank'] = ($pos !== '' ? $pos . ' ' : '') . '#' . $rank['rank'] . ' of ' . $rank['posCount'];
         }
         $team = $pd['team'] ?? '';
-        $bye = $team !== '' ? (rotc_bye_week_map()[$team] ?? '') : '';
+        $bye = $team !== '' ? ($byes[$team] ?? '') : '';
         if ($bye !== '') $leagueLines['Bye Week'] = $bye;
         $injDetail = rotc_injury_detail_text($id);
         if ($injDetail !== '') $leagueLines['Status'] = $injDetail;
     }
 
+    // Compact newline-delimited "Label\tValue" encoding -- avoids repeating
+    // HTML-escaped &lt;strong&gt;/&lt;br&gt; tags hundreds of times per page
+    // and renders safely via DOM nodes in JS.
     $lines = [];
     foreach ($leagueLines + $statLines as $label => $value) {
         if ($value === '' || $value === null) continue;
-        $lines[] = htmlspecialchars($label) . ': <strong>' . htmlspecialchars((string) $value) . '</strong>';
+        $cleanLabel = str_replace(["\r", "\n", "\t"], ' ', (string) $label);
+        $cleanValue = str_replace(["\r", "\n", "\t"], ' ', (string) $value);
+        $lines[] = $cleanLabel . "\t" . $cleanValue;
     }
-    // Injury tag and the MFL profile link both sit OUTSIDE the hover
-    // trigger -- the injury tag keeps its own tooltip (full status +
-    // body part + expected return) and the MFL link needs to stay a
-    // real, independently clickable <a> -- neither should be swallowed
-    // by the photo card. Every page rendering names through this helper
-    // gets both without touching a single call site.
-    $playerId = isset($pd['id']) ? (string) $pd['id'] : null;
-    $inj = rotc_injury_tag($playerId);
-    $mflLink = rotc_mfl_player_link($playerId);
+    $inj = rotc_injury_tag($id);
+    $mflLink = rotc_mfl_player_link($id);
 
-    return '<span class="rotc-player-hover"'
-        . ' data-name="' . htmlspecialchars($displayName) . '"'
-        . ' data-photo="' . htmlspecialchars($photo ?? '') . '"'
-        . ' data-bio="' . htmlspecialchars($bio) . '"'
-        . ' data-stats="' . htmlspecialchars(implode('<br>', $lines)) . '">'
-        . htmlspecialchars($displayName) . '</span>' . $inj . $mflLink;
+    $attrs = 'class="rotc-player-hover"';
+    if ($espnId !== '') $attrs .= ' data-espn="' . htmlspecialchars($espnId) . '"';
+    if ($bio !== '')    $attrs .= ' data-bio="' . htmlspecialchars($bio) . '"';
+    if ($lines)         $attrs .= ' data-s="' . htmlspecialchars(implode("\n", $lines)) . '"';
+
+    return '<span ' . $attrs . '>' . htmlspecialchars($displayName) . '</span>' . $inj . $mflLink;
 }
 
 /**
  * Echo this once near the bottom of any page that uses
  * rotc_player_hover_span() -- outputs the floating card markup plus
- * the JS that positions it on hover. Safe to call even if the page has
- * zero .rotc-player-hover spans (the querySelectorAll just finds none).
+ * delegated JS listeners (O(1) listeners regardless of player count).
  */
 function rotc_player_hover_widget(): void {
 ?>
@@ -280,32 +276,70 @@ function rotc_player_hover_widget(): void {
   var statsEl = document.getElementById('rotc-pc-stats');
   if (!card) return;
 
-  document.querySelectorAll('.rotc-player-hover').forEach(function (el) {
-    el.style.cursor = 'default';
-    el.style.borderBottom = '1px dotted var(--muted)';
-    el.addEventListener('mouseenter', function () {
-      nameEl.textContent = el.dataset.name || '';
-      bioEl.textContent = el.dataset.bio || '';
-      statsEl.innerHTML = el.dataset.stats || '';
-      if (el.dataset.photo) {
-        photo.src = el.dataset.photo;
-        photo.style.display = 'block';
-        photo.onerror = function () { photo.style.display = 'none'; };
-      } else {
-        photo.style.display = 'none';
+  var ESPN_BASE = 'https://a.espncdn.com/i/headshots/nfl/players/full/';
+  var activeEl = null;
+
+  function renderStats(el) {
+    statsEl.textContent = '';
+    if (el.dataset.s) {
+      var rows = el.dataset.s.split('\n');
+      for (var i = 0; i < rows.length; i++) {
+        if (i > 0) statsEl.appendChild(document.createElement('br'));
+        var tab = rows[i].indexOf('\t');
+        if (tab >= 0) {
+          statsEl.appendChild(document.createTextNode(rows[i].slice(0, tab) + ': '));
+          var strong = document.createElement('strong');
+          strong.textContent = rows[i].slice(tab + 1);
+          statsEl.appendChild(strong);
+        } else {
+          statsEl.appendChild(document.createTextNode(rows[i]));
+        }
       }
-      card.style.display = 'block';
-    });
-    el.addEventListener('mousemove', function (e) {
-      var x = e.clientX + 16, y = e.clientY + 16;
-      if (x + 236 > window.innerWidth) x = e.clientX - 236;
-      if (y + 260 > window.innerHeight) y = e.clientY - 260;
-      card.style.left = x + 'px';
-      card.style.top = y + 'px';
-    });
-    el.addEventListener('mouseleave', function () {
-      card.style.display = 'none';
-    });
+    } else if (el.dataset.stats) {
+      statsEl.innerHTML = el.dataset.stats;
+    }
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest && e.target.closest('.rotc-player-hover');
+    if (!el || el === activeEl) return;
+    activeEl = el;
+    nameEl.textContent = el.dataset.name || el.textContent || '';
+    bioEl.textContent = el.dataset.bio || '';
+    renderStats(el);
+    var src = el.dataset.espn ? (ESPN_BASE + el.dataset.espn + '.png') : (el.dataset.photo || '');
+    if (src) {
+      photo.src = src;
+      photo.style.display = 'block';
+      photo.onerror = function () { photo.style.display = 'none'; };
+    } else {
+      photo.style.display = 'none';
+    }
+    card.style.display = 'block';
+  });
+
+  document.addEventListener('mousemove', function (e) {
+    if (!activeEl) return;
+    var x = e.clientX + 16, y = e.clientY + 16;
+    if (x + 236 > window.innerWidth) x = e.clientX - 236;
+    if (y + 260 > window.innerHeight) y = e.clientY - 260;
+    card.style.left = x + 'px';
+    card.style.top = y + 'px';
+  });
+
+  document.addEventListener('mouseout', function (e) {
+    if (!activeEl) return;
+    var rel = e.relatedTarget;
+    if (rel && activeEl.contains(rel)) return;
+    activeEl = null;
+    card.style.display = 'none';
+  });
+
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest && e.target.closest('.rotc-player-mfl-link');
+    if (!link) return;
+    e.preventDefault();
+    window.open(link.href, 'rotc_mfl', 'width=1200,height=900,resizable=yes,scrollbars=yes');
   });
 })();
 </script>

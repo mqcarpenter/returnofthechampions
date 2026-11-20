@@ -306,15 +306,30 @@ function rotc_recap_paragraphs(array $winner, array $loser, array $game, int $we
  *   completed yet this season (preseason, or before Week 1 kicks off).
  */
 function rotc_current_recap_week(int $year): ?array {
+    static $mem = [];
+    if (array_key_exists($year, $mem)) return $mem[$year];
+
+    $cacheKey = 'current-recap-week-' . MFL_LEAGUE_ID . '-' . $year;
+    $cached = rotc_derived_cache_get($cacheKey, 900);
+    if (is_array($cached) && array_key_exists('result', $cached)) {
+        $mem[$year] = $cached['result'];
+        return $mem[$year];
+    }
+
+    mfl_prefetch([
+        ['type' => 'league',      'year' => $year, 'ttl' => 86400, 'params' => [],           'includeLeague' => true],
+        ['type' => 'nflSchedule', 'year' => $year, 'ttl' => 21600, 'params' => ['W' => 'ALL'], 'includeLeague' => false],
+    ]);
+
     $leagueRaw = mfl_cached_get_year('league', $year, 86400, []);
     $endWeek = (int) ($leagueRaw['league']['endWeek'] ?? 17);
     if ($endWeek < 1) $endWeek = 17;
 
+    $allWeeks = rotc_nfl_schedule_all_weeks($year, 21600, $endWeek);
     $now = time();
     $completedWeek = null;
     for ($w = 1; $w <= $endWeek; $w++) {
-        $raw = mfl_cached_get_year('nflSchedule', $year, 21600, ['W' => $w], false);
-        $games = mfl_normalize_list($raw['nflSchedule']['matchup'] ?? null);
+        $games = $allWeeks[$w] ?? [];
         if (!$games) break; // no published schedule for this week -- stop here.
 
         $lastKickoff = 0;
@@ -331,32 +346,76 @@ function rotc_current_recap_week(int $year): ?array {
         }
     }
 
-    return $completedWeek ? ['year' => $year, 'week' => $completedWeek] : null;
+    $result = $completedWeek ? ['year' => $year, 'week' => $completedWeek] : null;
+    rotc_derived_cache_set($cacheKey, ['result' => $result]);
+    $mem[$year] = $result;
+    return $result;
+}
+
+/**
+ * Pre-builds [playerId => ['rank' => int, 'total' => int]] for every scored
+ * player in a single O(N log N) pass per position instead of re-scanning and
+ * re-sorting all 3,000 scores once per matchup side.
+ */
+function rotc_build_positional_week_ranks(array $weekScores, array $positionMap): array {
+    $byPos = [];
+    foreach ($weekScores as $pid => $score) {
+        $pos = $positionMap[$pid] ?? '';
+        if ($pos === '') continue;
+        $byPos[$pos][$pid] = $score;
+    }
+    $ranks = [];
+    foreach ($byPos as $pos => $pool) {
+        arsort($pool);
+        $total = count($pool);
+        $r = 0;
+        foreach ($pool as $pid => $sc) {
+            $r++;
+            $ranks[$pid] = ['rank' => $r, 'total' => $total];
+        }
+    }
+    return $ranks;
 }
 
 function rotc_weekly_recap_article(int $year, int $week): ?array {
-    $franchises = mfl_franchises();
-    $raw = mfl_cached_get_year('weeklyResults', $year, 86400, ['W' => $week]);
-    $matchups = mfl_normalize_list($raw['weeklyResults']['matchup'] ?? null);
-    if (!$matchups) return null;
+    static $mem = [];
+    $memKey = $year . ':' . $week;
+    if (array_key_exists($memKey, $mem)) return $mem[$memKey];
 
-    // Records: simplification -- uses each franchise's FINAL record for
-    // $year (TYPE=leagueStandings), not "record entering week $week".
-    // Reconstructing an as-of-week-N record would mean re-tallying
-    // every prior week's results one call at a time; for a fully
-    // completed past season (our placeholder data source) the final
-    // record is the honest, cheap option and is called out here rather
-    // than silently presented as something more precise than it is.
-    $standingsRaw = mfl_cached_get_year('leagueStandings', $year, 86400, ['ALL' => 1]);
+    $ttl = ($year < (int) MFL_YEAR) ? 604800 : 86400;
+    $cacheKey = 'weekly-recap-' . MFL_LEAGUE_ID . '-' . $year . '-' . $week;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached)) {
+        $mem[$memKey] = $cached;
+        return $cached;
+    }
+
+    // Prefetch every MFL call this week's recap needs in a single parallel wave.
+    mfl_prefetch([
+        ['type' => 'league',          'year' => (int) MFL_YEAR, 'ttl' => 86400, 'params' => []],
+        ['type' => 'weeklyResults',   'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $week]],
+        ['type' => 'leagueStandings', 'year' => $year, 'ttl' => $ttl, 'params' => ['ALL' => 1]],
+        ['type' => 'schedule',        'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $week + 1]],
+        ['type' => 'playerScores',    'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $week, 'COUNT' => 3000]],
+        ['type' => 'players',         'year' => $year, 'ttl' => ($year < (int) MFL_YEAR) ? 604800 : 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+    ]);
+
+    $franchises = mfl_franchises();
+    $raw = mfl_cached_get_year('weeklyResults', $year, $ttl, ['W' => $week]);
+    $matchups = mfl_normalize_list($raw['weeklyResults']['matchup'] ?? null);
+    if (!$matchups) {
+        $mem[$memKey] = null;
+        return null;
+    }
+
+    $standingsRaw = mfl_cached_get_year('leagueStandings', $year, $ttl, ['ALL' => 1]);
     $records = [];
     foreach (mfl_normalize_list($standingsRaw['leagueStandings']['franchise'] ?? null) as $row) {
         $records[$row['id']] = $row['h2hwlt'] ?? '';
     }
 
-    // Next-week opponents, from the league's own fantasy schedule (not
-    // nflSchedule). Empty for the season's final week.
     $nextOpponents = [];
-    $nextRaw = mfl_cached_get_year('schedule', $year, 86400, ['W' => $week + 1]);
+    $nextRaw = mfl_cached_get_year('schedule', $year, $ttl, ['W' => $week + 1]);
     foreach (mfl_normalize_list($nextRaw['schedule']['weeklySchedule']['matchup'] ?? null) as $m) {
         $sides = mfl_normalize_list($m['franchise'] ?? null);
         if (count($sides) < 2) continue;
@@ -365,26 +424,14 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
         $nextOpponents[$y['id']] = $x['id'];
     }
 
-    // League-wide position map (TYPE=players, no PLAYERS filter --
-    // confirmed live this returns the full ~2800-player DB with
-    // position included even without DETAILS=1) and this week's
-    // league-wide score pool (TYPE=playerScores), both needed for
-    // positional week-rank. Cached separately so every matchup this
-    // week reuses the same two calls instead of one each.
-    $positionMap = [];
-    $allPlayersRaw = mfl_cached_get_year('players', $year, 86400, [], false);
-    foreach (mfl_normalize_list($allPlayersRaw['players']['player'] ?? null) as $p) {
-        if (!empty($p['id'])) $positionMap[$p['id']] = $p['position'] ?? '';
-    }
+    $positionMap = rotc_player_position_map($year);
     $weekScores = [];
-    $scoresRaw = mfl_cached_get_year('playerScores', $year, 86400, ['W' => $week, 'COUNT' => 3000]);
+    $scoresRaw = mfl_cached_get_year('playerScores', $year, $ttl, ['W' => $week, 'COUNT' => 3000]);
     foreach (mfl_normalize_list($scoresRaw['playerScores']['playerScore'] ?? null) as $row) {
         if (!empty($row['id']) && $row['score'] !== '') $weekScores[$row['id']] = (float) $row['score'];
     }
+    $posRanks = rotc_build_positional_week_ranks($weekScores, $positionMap);
 
-    // First pass: parse every matchup's raw shape and collect every
-    // player id that needs a bio (full box score + bench-miss callout
-    // players), so they resolve in one batched TYPE=players call.
     $needIds = [];
     $rawSides = [];
     foreach ($matchups as $m) {
@@ -397,10 +444,11 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
             foreach ($players as $p) { if (!empty($p['id'])) $scoreById[$p['id']] = (float) ($p['score'] ?? 0); }
 
             $starterIds = array_filter(explode(',', $s['starters'] ?? ''));
+            $starterSet = array_flip($starterIds);
             $optimalIds = array_filter(explode(',', $s['optimal'] ?? ''));
             $benchMissId = null; $benchMissScore = -1.0;
             foreach ($optimalIds as $oid) {
-                if (in_array($oid, $starterIds, true)) continue;
+                if (isset($starterSet[$oid])) continue;
                 $sc = $scoreById[$oid] ?? 0;
                 if ($sc > $benchMissScore) { $benchMissScore = $sc; $benchMissId = $oid; }
             }
@@ -411,8 +459,8 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
                 if ($sc > $topScore) { $topScore = $sc; $topId = $sid; }
             }
 
-            foreach ($starterIds as $sid) $needIds[] = $sid;
-            if ($benchMissId) $needIds[] = $benchMissId;
+            foreach ($starterIds as $sid) $needIds[$sid] = true;
+            if ($benchMissId) $needIds[$benchMissId] = true;
 
             $fid = $s['id'] ?? '';
             $pair[] = [
@@ -426,23 +474,20 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
         if (count($pair) < 2) continue;
         $rawSides[] = ['a' => $pair[0], 'b' => $pair[1], 'isPlayoffs' => ($m['regularSeason'] ?? '1') === '0'];
     }
-    if (!$rawSides) return null;
+    if (!$rawSides) {
+        $mem[$memKey] = null;
+        return null;
+    }
 
+    $resolved = rotc_resolve_players(array_keys($needIds), $year, true);
     $playerData = [];
-    foreach (array_chunk(array_unique($needIds), 150) as $chunk) {
-        $resp = mfl_cached_get_year('players', $year, 86400, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-            // MFL's name field is "Last, First" -- flip it to "First Last"
-            // for display, same convention includes/live-wire.php already
-            // uses for the Live Wire board, so a player reads the same way
-            // in a recap article as everywhere else on the site.
-            $name = (string) ($p['name'] ?? '');
-            if (strpos($name, ',') !== false) {
-                [$last, $first] = array_map('trim', explode(',', $name, 2));
-                $p['name'] = "$first $last";
-            }
-            $playerData[$p['id']] = $p;
+    foreach ($resolved as $pid => $p) {
+        $name = (string) ($p['name'] ?? '');
+        if (strpos($name, ',') !== false) {
+            [$last, $first] = array_map('trim', explode(',', $name, 2));
+            $p['name'] = "$first $last";
         }
+        $playerData[$pid] = $p;
     }
 
     $games = [];
@@ -466,7 +511,7 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
                 $pd = $playerData[$raw['topId']] ?? null;
                 $topPerformer = [
                     'name' => $pd['name'] ?? 'Unknown', 'pd' => $pd, 'score' => $raw['topScore'],
-                    'positionRank' => $pd ? rotc_positional_week_rank($raw['topId'], $pd['position'] ?? '', $weekScores, $positionMap) : null,
+                    'positionRank' => $pd ? ($posRanks[$raw['topId']] ?? null) : null,
                 ];
             }
 
@@ -511,27 +556,41 @@ function rotc_weekly_recap_article(int $year, int $week): ?array {
     foreach ($games as $i => &$g) { $g['isGameOfWeek'] = $i === 0; }
     unset($g);
 
-    return ['year' => $year, 'week' => $week, 'games' => $games];
+    $article = ['year' => $year, 'week' => $week, 'games' => $games];
+    rotc_derived_cache_set($cacheKey, $article);
+    $mem[$memKey] = $article;
+    return $article;
 }
 
 /**
- * Pulls every game from weeks 1..$throughWeek of $year (each week's
- * article reused from rotc_weekly_recap_article(), which is itself
- * cached a day at a time via mfl_cached_get_year -- so scanning a whole
- * season here costs nothing beyond what the front page + archive pages
- * already fetch) and returns the $limit most notable ones league-wide,
- * for a season-long "Top Games" rail. "Most notable" = closest margin
- * first (matches the same Game-of-the-Week definition used per-week),
- * ties broken by highest combined score (a shootout beats a defensive
- * squeaker at the same margin).
- *
- * Each returned game gets a 'week' key added so callers can link back
- * to that week's specific article anchor.
- *
- * @return array of game (same shape as rotc_weekly_recap_article()'s
- *   games, plus 'week') ordered most- to least-notable.
+ * Prefetch all underlying MFL endpoints for weeks 1..$throughWeek in parallel
+ * when building season-wide recap summaries on a cold cache.
  */
+function rotc_recap_prefetch_weeks(int $year, int $throughWeek): void {
+    $ttl = ($year < (int) MFL_YEAR) ? 604800 : 86400;
+    $reqs = [
+        ['type' => 'league',          'year' => (int) MFL_YEAR, 'ttl' => 86400, 'params' => []],
+        ['type' => 'leagueStandings', 'year' => $year, 'ttl' => $ttl, 'params' => ['ALL' => 1]],
+        ['type' => 'players',         'year' => $year, 'ttl' => ($year < (int) MFL_YEAR) ? 604800 : 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+    ];
+    for ($w = 1; $w <= $throughWeek; $w++) {
+        if (rotc_derived_cache_get('weekly-recap-' . MFL_LEAGUE_ID . '-' . $year . '-' . $w, $ttl) !== null) {
+            continue;
+        }
+        $reqs[] = ['type' => 'weeklyResults', 'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $w]];
+        $reqs[] = ['type' => 'schedule',      'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $w + 1]];
+        $reqs[] = ['type' => 'playerScores',  'year' => $year, 'ttl' => $ttl, 'params' => ['W' => $w, 'COUNT' => 3000]];
+    }
+    mfl_prefetch($reqs);
+}
+
 function rotc_season_top_games(int $year, int $throughWeek, int $limit = 4): array {
+    $ttl = ($year < (int) MFL_YEAR) ? 604800 : 86400;
+    $cacheKey = 'season-top-games-' . MFL_LEAGUE_ID . '-' . $year . '-' . $throughWeek . '-' . $limit;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached)) return $cached;
+
+    rotc_recap_prefetch_weeks($year, $throughWeek);
     $all = [];
     for ($w = 1; $w <= $throughWeek; $w++) {
         $wk = rotc_weekly_recap_article($year, $w);
@@ -547,24 +606,18 @@ function rotc_season_top_games(int $year, int $throughWeek, int $limit = 4): arr
         $yTotal = $y['a']['score'] + $y['b']['score'];
         return $yTotal <=> $xTotal;
     });
-    return array_slice($all, 0, $limit);
+    $out = array_slice($all, 0, $limit);
+    if ($out) rotc_derived_cache_set($cacheKey, $out);
+    return $out;
 }
 
-/**
- * Lists every week from 1..$throughWeek (most recent first) with just
- * enough summary to render a compact "Recap Archive" strip -- the
- * Game-of-the-Week headline for that week, no full paragraph text.
- * $throughWeek is normally the CURRENT recap week minus one (the
- * current week is already shown as the live recap, not the archive),
- * but callers may pass the current week itself if they want it
- * included too.
- *
- * @return array of ['week'=>int,'winner'=>fullSide,'loser'=>fullSide,
- *   'margin'=>float] ordered newest week first. Skips any week with no
- *   completed games (bye-heavy edge case, or a week that hasn't
- *   happened at all).
- */
 function rotc_recap_archive_weeks(int $year, int $throughWeek): array {
+    $ttl = ($year < (int) MFL_YEAR) ? 604800 : 86400;
+    $cacheKey = 'recap-archive-weeks-' . MFL_LEAGUE_ID . '-' . $year . '-' . $throughWeek;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached)) return $cached;
+
+    rotc_recap_prefetch_weeks($year, $throughWeek);
     $out = [];
     for ($w = $throughWeek; $w >= 1; $w--) {
         $wk = rotc_weekly_recap_article($year, $w);
@@ -572,7 +625,14 @@ function rotc_recap_archive_weeks(int $year, int $throughWeek): array {
         $g = $wk['games'][0]; // Game of the Week for that week.
         $winner = $g['a']['score'] >= $g['b']['score'] ? $g['a'] : $g['b'];
         $loser  = $g['a']['score'] >= $g['b']['score'] ? $g['b'] : $g['a'];
-        $out[] = ['week' => $w, 'winner' => $winner, 'loser' => $loser, 'margin' => $g['margin'], 'gameCount' => count($wk['games'])];
+        $out[] = [
+            'week' => $w,
+            'winner' => ['id' => $winner['id'], 'name' => $winner['name'], 'abbrev' => $winner['abbrev'], 'score' => $winner['score']],
+            'loser'  => ['id' => $loser['id'],  'name' => $loser['name'],  'abbrev' => $loser['abbrev'],  'score' => $loser['score']],
+            'margin' => $g['margin'],
+            'gameCount' => count($wk['games']),
+        ];
     }
+    if ($out) rotc_derived_cache_set($cacheKey, $out);
     return $out;
 }

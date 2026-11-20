@@ -68,16 +68,26 @@ const ROTC_HOF_MANUAL_CHAMPIONS = [
  * cleanly rather than showing a bogus "champion."
  */
 function rotc_hof_champion_for_year(int $year): ?array {
-    $bracketsRaw = mfl_cached_get_year('playoffBrackets', $year, 86400, []);
+    $ttl = ($year < (int) MFL_YEAR) ? 604800 : 86400;
+    $cacheKey = 'hof-champ-' . MFL_LEAGUE_ID . '-' . $year;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached) && array_key_exists('champ', $cached)) {
+        return $cached['champ'];
+    }
+
+    $bracketsRaw = mfl_cached_get_year('playoffBrackets', $year, $ttl, []);
     $brackets = mfl_normalize_list($bracketsRaw['playoffBrackets']['playoffBracket'] ?? null);
 
     $title = null;
     foreach ($brackets as $b) {
         if (($b['name'] ?? '') === 'ROTC Championship') { $title = $b; break; }
     }
-    if (!$title) return null;
+    if (!$title) {
+        if ($year < (int) MFL_YEAR) rotc_derived_cache_set($cacheKey, ['champ' => null]);
+        return null;
+    }
 
-    $detailRaw = mfl_cached_get_year('playoffBracket', $year, 86400, ['BRACKET_ID' => $title['id']]);
+    $detailRaw = mfl_cached_get_year('playoffBracket', $year, $ttl, ['BRACKET_ID' => $title['id']]);
     $rounds = mfl_normalize_list($detailRaw['playoffBracket']['playoffRound'] ?? null);
     if (!$rounds) return null;
     usort($rounds, function ($a, $b) { return (int) $a['week'] <=> (int) $b['week']; });
@@ -122,7 +132,7 @@ function rotc_hof_champion_for_year(int $year): ?array {
     }
     usort($path, function ($a, $b) { return $a['week'] <=> $b['week']; });
 
-    return [
+    $champ = [
         'year' => $year,
         'championId' => $championId,
         'runnerUpId' => $runnerUpId,
@@ -133,6 +143,8 @@ function rotc_hof_champion_for_year(int $year): ?array {
         'path' => $path,
         'source' => 'bracket',
     ];
+    rotc_derived_cache_set($cacheKey, ['champ' => $champ]);
+    return $champ;
 }
 
 /**
@@ -164,10 +176,84 @@ function rotc_hof_manual_champion_for_year(int $year): ?array {
  * backfills older brackets), falling back to the manual 2004-2016 list;
  * years with neither are skipped, not erred on.
  */
+/**
+ * Earliest season for which MFL actually holds playoffBracket data for this
+ * league (confirmed live: 2004-2016 return zero brackets, 1999-2003 predate
+ * MFL entirely). Skipping API calls below this floor avoids 18 wasted HTTP
+ * roundtrips on history/hall-of-fame.php and api/history.php.
+ */
+const ROTC_HOF_BRACKET_START_YEAR = 2017;
+
+/**
+ * Only the single reigning (most recently confirmed) champion -- used by
+ * the front page spotlight so index.php doesn't have to fetch/parse 10+
+ * seasons of playoff brackets just to grab element [0].
+ */
+function rotc_reigning_champion(int $maxYear, int $minYear = 1999): ?array {
+    // Check current + previous season in parallel first (99% hit on the
+    // first two years).
+    $curYear = (int) MFL_YEAR;
+    $prefetchYears = [];
+    for ($y = $maxYear; $y >= max($minYear, ROTC_HOF_BRACKET_START_YEAR, $maxYear - 1); $y--) {
+        $ttl = ($y < $curYear) ? 604800 : 86400;
+        if (rotc_derived_cache_get('hof-champ-' . MFL_LEAGUE_ID . '-' . $y, $ttl) === null) {
+            $prefetchYears[] = $y;
+        }
+    }
+    if ($prefetchYears) {
+        $reqs = [];
+        foreach ($prefetchYears as $y) {
+            $reqs[] = ['type' => 'playoffBrackets', 'year' => $y, 'ttl' => ($y < $curYear) ? 604800 : 86400, 'params' => []];
+        }
+        mfl_prefetch($reqs);
+    }
+    for ($y = $maxYear; $y >= $minYear; $y--) {
+        $c = ($y >= ROTC_HOF_BRACKET_START_YEAR)
+            ? (rotc_hof_champion_for_year($y) ?? rotc_hof_manual_champion_for_year($y))
+            : rotc_hof_manual_champion_for_year($y);
+        if ($c) return $c;
+    }
+    return null;
+}
+
 function rotc_hall_of_fame_champions(int $fromYear, int $toYear): array {
+    $curYear = (int) MFL_YEAR;
+    $apiYears = [];
+    for ($y = $toYear; $y >= max($fromYear, ROTC_HOF_BRACKET_START_YEAR); $y--) {
+        $ttl = ($y < $curYear) ? 604800 : 86400;
+        if (rotc_derived_cache_get('hof-champ-' . MFL_LEAGUE_ID . '-' . $y, $ttl) === null) {
+            $apiYears[] = $y;
+        }
+    }
+
+    // Wave 1: prefetch all missing playoffBrackets in parallel.
+    if ($apiYears) {
+        $reqs = [];
+        foreach ($apiYears as $y) {
+            $reqs[] = ['type' => 'playoffBrackets', 'year' => $y, 'ttl' => ($y < $curYear) ? 604800 : 86400, 'params' => []];
+        }
+        mfl_prefetch($reqs);
+
+        // Wave 2: prefetch all matching ROTC Championship playoffBracket details in parallel.
+        $detailReqs = [];
+        foreach ($apiYears as $y) {
+            $ttl = ($y < $curYear) ? 604800 : 86400;
+            $bracketsRaw = mfl_cached_get_year('playoffBrackets', $y, $ttl, []);
+            foreach (mfl_normalize_list($bracketsRaw['playoffBrackets']['playoffBracket'] ?? null) as $b) {
+                if (($b['name'] ?? '') === 'ROTC Championship' && isset($b['id'])) {
+                    $detailReqs[] = ['type' => 'playoffBracket', 'year' => $y, 'ttl' => $ttl, 'params' => ['BRACKET_ID' => $b['id']]];
+                    break;
+                }
+            }
+        }
+        if ($detailReqs) mfl_prefetch($detailReqs);
+    }
+
     $out = [];
     for ($y = $toYear; $y >= $fromYear; $y--) {
-        $c = rotc_hof_champion_for_year($y) ?? rotc_hof_manual_champion_for_year($y);
+        $c = ($y >= ROTC_HOF_BRACKET_START_YEAR)
+            ? (rotc_hof_champion_for_year($y) ?? rotc_hof_manual_champion_for_year($y))
+            : rotc_hof_manual_champion_for_year($y);
         if ($c) $out[] = $c;
     }
     return $out;

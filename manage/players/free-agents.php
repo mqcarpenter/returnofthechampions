@@ -61,26 +61,28 @@ if (!$fetchError) {
     require_once __DIR__ . '/../includes/player-hover.php';
 
     $params = $posFilter ? ['POSITION' => $posFilter] : [];
+    $curYear = (int) MFL_YEAR;
+    mfl_prefetch([
+        ['type' => 'freeAgents',      'year' => $curYear,     'ttl' => 900,    'params' => $params],
+        ['type' => 'players',         'year' => $curYear,     'ttl' => 43200,  'params' => ['DETAILS' => 1], 'includeLeague' => false],
+        ['type' => 'nflByeWeeks',     'year' => $curYear,     'ttl' => 86400,  'params' => [], 'includeLeague' => false],
+        ['type' => 'nflSchedule',     'year' => $curYear,     'ttl' => 86400,  'params' => ['W' => 1], 'includeLeague' => false],
+        ['type' => 'projectedScores', 'year' => $curYear,     'ttl' => 3600,   'params' => ['W' => 1, 'COUNT' => 3000]],
+        ['type' => 'playerScores',    'year' => $curYear - 1, 'ttl' => 604800, 'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+        ['type' => 'playerScores',    'year' => $curYear,     'ttl' => 1800,   'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+        ['type' => 'rosters',         'year' => $curYear,     'ttl' => 1800,   'params' => []],
+        ['type' => 'injuries',        'year' => $curYear,     'ttl' => 1800,   'params' => [], 'includeLeague' => false],
+    ]);
+
     $faRaw = mfl_cached_get('freeAgents', 900, $params); // 15 min -- waiver activity changes this
     $allIds = array_column(mfl_normalize_list($faRaw['freeAgents']['leagueUnit']['player'] ?? null), 'id');
     $total = count($allIds);
 
-    // Player bios for the WHOLE filtered set (needed up front for sorting),
-    // chunked at 150 ids per MFL API call, each chunk cached an hour.
-    $players = [];
-    foreach (array_chunk($allIds, 150) as $chunk) {
-        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-            $players[$p['id']] = $p;
-        }
-    }
+    // Resolve all player bios from the shared full-player-DB index (0 extra HTTP calls).
+    $players = rotc_resolve_players($allIds, null, true);
 
     // Bye weeks -- team abbrev -> bye week number.
-    $byeRaw = mfl_cached_get('nflByeWeeks', 86400, [], false);
-    $byeByTeam = [];
-    foreach (mfl_normalize_list($byeRaw['nflByeWeeks']['team'] ?? null) as $t) {
-        $byeByTeam[$t['id']] = $t['bye_week'] ?? '';
-    }
+    $byeByTeam = rotc_bye_week_map();
 
     // Week 1 opponent -- team abbrev -> opponent abbrev.
     $schedRaw = mfl_cached_get('nflSchedule', 86400, ['W' => 1], false);
@@ -100,9 +102,8 @@ if (!$fetchError) {
         if (!empty($row['id'])) $projById[$row['id']] = $row['score'] ?? '';
     }
 
-    // 2025 season total points -- player id -> score. Separate league-agnostic
-    // year call, cached long since last year's totals never change.
-    $prevYearRaw = mfl_cached_get_year('playerScores', (int) MFL_YEAR - 1, 86400, ['W' => 'YTD', 'COUNT' => 3000]);
+    // Prior-season total points -- cached long since last year's totals never change.
+    $prevYearRaw = mfl_cached_get_year('playerScores', $curYear - 1, 604800, ['W' => 'YTD', 'COUNT' => 3000]);
     $prevPtsById = [];
     foreach (mfl_normalize_list($prevYearRaw['playerScores']['playerScore'] ?? null) as $row) {
         if (!empty($row['id'])) $prevPtsById[$row['id']] = $row['score'] ?? '';

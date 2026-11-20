@@ -93,6 +93,17 @@ if (!$fetchError) {
     require_once __DIR__ . '/../includes/mfl-api.php';
     require_once __DIR__ . '/../includes/player-hover.php';
 
+    $curYear = (int) MFL_YEAR;
+    mfl_prefetch([
+        ['type' => 'league',       'year' => $curYear,     'ttl' => 86400,  'params' => []],
+        ['type' => 'rosters',      'year' => $curYear,     'ttl' => 1800,   'params' => []],
+        ['type' => 'players',      'year' => $curYear,     'ttl' => 43200,  'params' => ['DETAILS' => 1], 'includeLeague' => false],
+        ['type' => 'nflByeWeeks',  'year' => $curYear,     'ttl' => 86400,  'params' => [], 'includeLeague' => false],
+        ['type' => 'injuries',     'year' => $curYear,     'ttl' => 1800,   'params' => [], 'includeLeague' => false],
+        ['type' => 'playerScores', 'year' => $curYear,     'ttl' => 1800,   'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+        ['type' => 'playerScores', 'year' => $curYear - 1, 'ttl' => 604800, 'params' => ['W' => 'YTD', 'COUNT' => 3000]],
+    ]);
+
     $franchises = mfl_franchises();
     $divisions  = mfl_divisions_conferences();
 
@@ -132,18 +143,12 @@ if (!$fetchError) {
     }
 
     if ($allIds) {
-        foreach (array_chunk(array_unique($allIds), 150) as $chunk) {
-            $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-            foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) { $players[$p['id']] = $p; }
-        }
+        $players = rotc_resolve_players(array_unique($allIds), null, true);
     }
 
-    $byeRaw = mfl_cached_get('nflByeWeeks', 86400, [], false);
-    foreach (mfl_normalize_list($byeRaw['nflByeWeeks']['team'] ?? null) as $t) {
-        $byeByTeam[$t['id']] = $t['bye_week'] ?? '';
-    }
+    $byeByTeam = rotc_bye_week_map();
 
-    $prevYearRaw = mfl_cached_get_year('playerScores', (int) MFL_YEAR - 1, 86400, ['W' => 'YTD', 'COUNT' => 3000]);
+    $prevYearRaw = mfl_cached_get_year('playerScores', $curYear - 1, 604800, ['W' => 'YTD', 'COUNT' => 3000]);
     foreach (mfl_normalize_list($prevYearRaw['playerScores']['playerScore'] ?? null) as $row) {
         if (!empty($row['id'])) $prevPtsById[$row['id']] = $row['score'] ?? '';
     }

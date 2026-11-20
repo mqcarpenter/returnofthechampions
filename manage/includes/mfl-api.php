@@ -15,6 +15,117 @@
  * liveScoring on gameday wants a much shorter TTL.
  */
 
+/**
+ * Internal cache directory + key helpers shared by mfl_cached_get_year(),
+ * mfl_prefetch(), and derived-map caches.
+ */
+function mfl_cache_dir(): string {
+    static $dir = null;
+    if ($dir === null) {
+        $dir = sys_get_temp_dir() . '/rotc-mfl-cache';
+        if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    }
+    return $dir;
+}
+
+function mfl_cache_key(string $type, int $year, array $params = [], bool $includeLeague = true): string {
+    // Params affect the response shape (e.g. POOLTYPE, W, ALL) so they
+    // need to be part of the cache key, not just the request type.
+    // Exact same key format preserved so pre-existing cached files (including
+    // stale league fallbacks) remain 100% compatible.
+    return $type . '-' . MFL_LEAGUE_ID . '-' . $year . '-' . ($includeLeague ? 'L' : 'noL') . '-' . md5(serialize($params));
+}
+
+/**
+ * In-memory request-level cache backing mfl_cached_get_year() and
+ * mfl_prefetch(), avoiding repeated file_get_contents() + json_decode()
+ * for the same endpoint within a single PHP request.
+ */
+function &mfl_request_cache(): array {
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Fast derived-data cache using PHP serialize/unserialize (significantly
+ * faster than json_decode on large associative maps like player indexes
+ * and season rank maps) + request-level in-memory caching.
+ */
+function &rotc_derived_mem_cache(): array {
+    static $mem = [];
+    return $mem;
+}
+
+function rotc_derived_cache_get(string $key, int $ttlSeconds) {
+    $mem = &rotc_derived_mem_cache();
+    if ($ttlSeconds > 0 && array_key_exists($key, $mem)) {
+        return $mem[$key];
+    }
+    $file = mfl_cache_dir() . '/derived-' . $key . '.ser';
+    if ($ttlSeconds > 0 && is_file($file) && (time() - filemtime($file)) < $ttlSeconds) {
+        $raw = @file_get_contents($file);
+        if ($raw !== false && $raw !== '') {
+            $val = @unserialize($raw, ['allowed_classes' => false]);
+            if ($val !== false || $raw === 'b:0;') {
+                $mem[$key] = $val;
+                return $val;
+            }
+        }
+    }
+    return null;
+}
+
+function rotc_derived_cache_set(string $key, $value): void {
+    $mem = &rotc_derived_mem_cache();
+    $mem[$key] = $value;
+    $file = mfl_cache_dir() . '/derived-' . $key . '.ser';
+    $tmp  = $file . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, serialize($value), LOCK_EX) !== false) {
+        @rename($tmp, $file);
+    }
+}
+
+/**
+ * Cached league host (e.g. "https://www42.myfantasyleague.com") read from
+ * an already-cached TYPE=league payload WITHOUT triggering any network
+ * request. Lets league-scoped mfl_fetch() / mfl_prefetch() calls skip the
+ * 302 redirect + extra DNS/TCP/TLS roundtrip through api.myfantasyleague.com.
+ */
+function mfl_known_league_host(int $year): ?string {
+    static $hosts = [];
+    if (array_key_exists($year, $hosts)) return $hosts[$year];
+
+    $key = mfl_cache_key('league', $year, [], true);
+    $mem = &mfl_request_cache();
+    $league = $mem[$key] ?? null;
+    if ($league === null) {
+        $file = mfl_cache_dir() . '/' . $key . '.json';
+        if (is_file($file)) {
+            $decoded = json_decode((string) @file_get_contents($file), true);
+            if (is_array($decoded)) $league = $decoded;
+        }
+    }
+    $base = $league['league']['baseURL'] ?? null;
+    if (is_string($base) && preg_match('#^https://[a-z0-9.-]+\.myfantasyleague\.com/?$#i', $base)) {
+        $hosts[$year] = rtrim($base, '/');
+    } else {
+        $hosts[$year] = null;
+    }
+    return $hosts[$year];
+}
+
+function mfl_build_export_url(string $type, array $params, bool $includeLeague, int $year, bool $allowDirectHost = true): string {
+    $base = ['TYPE' => $type, 'JSON' => 1, 'APIKEY' => MFL_API_KEY];
+    if ($includeLeague) $base['L'] = MFL_LEAGUE_ID;
+    $query = http_build_query(array_merge($base, $params));
+    $host = 'https://api.myfantasyleague.com';
+    if ($includeLeague && $allowDirectHost && $type !== 'league') {
+        $direct = mfl_known_league_host($year);
+        if ($direct !== null) $host = $direct;
+    }
+    return $host . '/' . $year . '/export?' . $query;
+}
+
 function mfl_cached_get(string $type, int $ttlSeconds, array $params = [], bool $includeLeague = true, ?callable $isValid = null): ?array {
     return mfl_cached_get_year($type, (int) MFL_YEAR, $ttlSeconds, $params, $includeLeague, $isValid);
 }
@@ -24,8 +135,7 @@ function mfl_cached_get(string $type, int $ttlSeconds, array $params = [], bool 
  * current MFL_YEAR -- needed for things like a free agent's 2025 total
  * points shown on a 2026 page. Year is part of the cache key so a
  * prior-year lookup never collides with the current season's entry.
- */
-/**
+ *
  * $isValid (optional) is a caller-supplied sanity check on a FRESH
  * response, and exists because "no error key" does not mean "usable
  * data". Confirmed live 2026-09-05: an unauthorised TYPE=pool request
@@ -39,16 +149,19 @@ function mfl_cached_get(string $type, int $ttlSeconds, array $params = [], bool 
  * transport failure already gets.
  */
 function mfl_cached_get_year(string $type, int $year, int $ttlSeconds, array $params = [], bool $includeLeague = true, ?callable $isValid = null): ?array {
-    $cacheDir = sys_get_temp_dir() . '/rotc-mfl-cache';
-    if (!is_dir($cacheDir)) @mkdir($cacheDir, 0700, true);
-    // Params affect the response shape (e.g. POOLTYPE, W, ALL) so they
-    // need to be part of the cache key, not just the request type.
-    $cacheKey = $type . '-' . MFL_LEAGUE_ID . '-' . $year . '-' . ($includeLeague ? 'L' : 'noL') . '-' . md5(serialize($params));
-    $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
+    $cacheKey  = mfl_cache_key($type, $year, $params, $includeLeague);
+    $mem       = &mfl_request_cache();
+    if ($ttlSeconds > 0 && isset($mem[$cacheKey])) {
+        return $mem[$cacheKey];
+    }
 
-    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $ttlSeconds) {
-        $cached = json_decode(file_get_contents($cacheFile), true);
-        if (is_array($cached)) return $cached;
+    $cacheFile = mfl_cache_dir() . '/' . $cacheKey . '.json';
+    if ($ttlSeconds > 0 && is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttlSeconds) {
+        $cached = json_decode((string) @file_get_contents($cacheFile), true);
+        if (is_array($cached)) {
+            $mem[$cacheKey] = $cached;
+            return $cached;
+        }
     }
 
     $data = mfl_fetch($type, $params, $includeLeague, $year);
@@ -59,13 +172,135 @@ function mfl_cached_get_year(string $type, int $year, int $ttlSeconds, array $pa
         $data = null;
     }
     if ($data !== null) {
-        @file_put_contents($cacheFile, json_encode($data));
-    } elseif (file_exists($cacheFile)) {
+        @file_put_contents($cacheFile, json_encode($data), LOCK_EX);
+        $mem[$cacheKey] = $data;
+    } elseif (is_file($cacheFile)) {
         // MFL call failed but we have a stale copy -- serve it rather than nothing.
-        $stale = json_decode(file_get_contents($cacheFile), true);
-        if (is_array($stale)) return $stale;
+        $stale = json_decode((string) @file_get_contents($cacheFile), true);
+        if (is_array($stale)) {
+            $mem[$cacheKey] = $stale;
+            return $stale;
+        }
     }
     return $data;
+}
+
+/**
+ * Concurrently prefetch a batch of MFL API endpoints that are NOT already
+ * fresh in memory or on disk. Subsequent mfl_cached_get()/mfl_cached_get_year()
+ * calls for those same specs then hit memory in O(1).
+ *
+ * Each element of $requests:
+ *   ['type' => string, 'ttl' => int, 'year' => ?int, 'params' => array,
+ *    'includeLeague' => bool, 'isValid' => ?callable]
+ */
+function mfl_prefetch(array $requests, int $maxConcurrency = 8): void {
+    if (!$requests) return;
+    $mem = &mfl_request_cache();
+    $dir = mfl_cache_dir();
+    $now = time();
+
+    $todo = [];
+    foreach ($requests as $req) {
+        $type          = (string) ($req['type'] ?? '');
+        if ($type === '') continue;
+        $year          = isset($req['year']) ? (int) $req['year'] : (int) MFL_YEAR;
+        $ttl           = (int) ($req['ttl'] ?? 3600);
+        $params        = (array) ($req['params'] ?? []);
+        $includeLeague = array_key_exists('includeLeague', $req) ? (bool) $req['includeLeague'] : true;
+        $isValid       = $req['isValid'] ?? null;
+
+        $key = mfl_cache_key($type, $year, $params, $includeLeague);
+        if (isset($todo[$key])) continue;
+        if ($ttl > 0 && isset($mem[$key])) continue;
+
+        $file = $dir . '/' . $key . '.json';
+        if ($ttl > 0 && is_file($file) && ($now - filemtime($file)) < $ttl) {
+            continue;
+        }
+        $todo[$key] = [
+            'key'           => $key,
+            'file'          => $file,
+            'type'          => $type,
+            'year'          => $year,
+            'params'        => $params,
+            'includeLeague' => $includeLeague,
+            'isValid'       => $isValid,
+            'directUsed'    => ($includeLeague && $type !== 'league' && mfl_known_league_host($year) !== null),
+        ];
+    }
+
+    if (!$todo) return;
+
+    $chunks = array_chunk(array_values($todo), max(1, $maxConcurrency));
+    foreach ($chunks as $batch) {
+        $mh = curl_multi_init();
+        $handles = [];
+        foreach ($batch as $idx => $item) {
+            $url = mfl_build_export_url($item['type'], $item['params'], $item['includeLeague'], $item['year'], true);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_ENCODING       => '',
+                CURLOPT_USERAGENT      => MFL_USER_AGENT,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 3,
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$idx] = [$ch, $item];
+        }
+
+        $running = null;
+        do {
+            $mrc = curl_multi_exec($mh, $running);
+            if ($running && $mrc === CURLM_OK) {
+                curl_multi_select($mh, 0.2);
+            }
+        } while ($running > 0 && $mrc === CURLM_OK);
+
+        $fallbacks = [];
+        foreach ($handles as [$ch, $item]) {
+            $body = curl_multi_getcontent($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+
+            $data = null;
+            if ($body !== false && $code === 200) {
+                $decoded = json_decode((string) $body, true);
+                if (is_array($decoded) && !isset($decoded['error'])) {
+                    $data = $decoded;
+                }
+            }
+            if ($data === null && $item['directUsed']) {
+                // Retry via generic api.myfantasyleague.com in case league moved hosts.
+                $fallbacks[] = $item;
+                continue;
+            }
+            if ($data !== null && $item['isValid'] !== null && !$item['isValid']($data)) {
+                $data = null;
+            }
+            if ($data !== null) {
+                @file_put_contents($item['file'], json_encode($data), LOCK_EX);
+                $mem[$item['key']] = $data;
+            }
+        }
+        curl_multi_close($mh);
+
+        // Fallback retry on generic host for any direct-host failure.
+        foreach ($fallbacks as $item) {
+            $data = mfl_fetch($item['type'], $item['params'], $item['includeLeague'], $item['year'], false);
+            if ($data !== null && $item['isValid'] !== null && !$item['isValid']($data)) {
+                $data = null;
+            }
+            if ($data !== null) {
+                @file_put_contents($item['file'], json_encode($data), LOCK_EX);
+                $mem[$item['key']] = $data;
+            }
+        }
+    }
 }
 
 /**
@@ -80,30 +315,39 @@ function mfl_cached_get_year(string $type, int $year, int $ttlSeconds, array $pa
  * ("must go to api.myfantasyleague.com") — a dead loop that comes back
  * as an {"error":...} payload instead of data. Pass false for those.
  */
-function mfl_fetch(string $type, array $params = [], bool $includeLeague = true, ?int $year = null): ?array {
-    $base = ['TYPE' => $type, 'JSON' => 1, 'APIKEY' => MFL_API_KEY];
-    if ($includeLeague) $base['L'] = MFL_LEAGUE_ID;
-    $query = http_build_query(array_merge($base, $params));
-    // Always hit the generic api host and follow MFL's redirect to the
-    // league's actual host -- see the config.php note on why we don't
-    // hardcode a wwwXX server.
-    $url = 'https://api.myfantasyleague.com/' . ($year ?? MFL_YEAR) . '/export?' . $query;
+function mfl_fetch(string $type, array $params = [], bool $includeLeague = true, ?int $year = null, bool $allowDirectHost = true): ?array {
+    static $ch = null;
+    $resolvedYear = $year ?? (int) MFL_YEAR;
+    $usedDirect   = ($includeLeague && $allowDirectHost && $type !== 'league' && mfl_known_league_host($resolvedYear) !== null);
+    $url          = mfl_build_export_url($type, $params, $includeLeague, $resolvedYear, $allowDirectHost);
 
-    $ch = curl_init($url);
+    if ($ch === null) {
+        $ch = curl_init();
+    }
     curl_setopt_array($ch, [
+        CURLOPT_URL            => $url,
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 4,
         CURLOPT_TIMEOUT        => 8,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => MFL_USER_AGENT,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS      => 3,
     ]);
     $body = curl_exec($ch);
-    $ok = $body !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200;
-    curl_close($ch);
-    if (!$ok) return null;
+    $ok   = $body !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200;
 
-    $data = json_decode($body, true);
-    if (!is_array($data) || isset($data['error'])) return null;
+    $data = null;
+    if ($ok) {
+        $decoded = json_decode((string) $body, true);
+        if (is_array($decoded) && !isset($decoded['error'])) {
+            $data = $decoded;
+        }
+    }
+    if ($data === null && $usedDirect) {
+        // League may have moved to another wwwXX host -- transparently fall back to api.myfantasyleague.com.
+        return mfl_fetch($type, $params, $includeLeague, $resolvedYear, false);
+    }
     return $data;
 }
 
@@ -236,12 +480,128 @@ function rotc_bye_week_map(): array {
  * A player with no score yet this season (rookie pre-debut, etc.)
  * simply has no entry -- callers check isset().
  */
+/**
+ * Shared full-player-DB index ([playerId => playerRecord]), cached on disk
+ * as a fast PHP-serialized map for 12h. Per MFL's own API documentation,
+ * TYPE=players is updated at most once per day and should be fetched once
+ * and reused locally rather than queried in per-page chunks.
+ */
+function rotc_all_players_map(?int $year = null, bool $details = true): array {
+    static $mem = [];
+    $y = $year ?? (int) MFL_YEAR;
+    $cacheKey = 'players-map-' . $y . '-' . ($details ? 'det' : 'min');
+    if (isset($mem[$cacheKey])) return $mem[$cacheKey];
+
+    $ttl = ($y < (int) MFL_YEAR) ? 604800 : 43200;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached) && $cached) {
+        $mem[$cacheKey] = $cached;
+        return $cached;
+    }
+
+    $params = $details ? ['DETAILS' => 1] : [];
+    $raw = mfl_cached_get_year('players', $y, $ttl, $params, false);
+    $map = [];
+    foreach (mfl_normalize_list($raw['players']['player'] ?? null) as $p) {
+        if (!empty($p['id'])) {
+            $map[(string) $p['id']] = $p;
+        }
+    }
+    if ($map) {
+        rotc_derived_cache_set($cacheKey, $map);
+    }
+    $mem[$cacheKey] = $map;
+    return $map;
+}
+
+/**
+ * Compact [playerId => position] lookup derived from the shared full
+ * player DB (tiny serialized cache, ~40 KB), avoiding 10+ chunked players
+ * calls or re-parsing full player records when only positions are needed.
+ */
+function rotc_player_position_map(?int $year = null): array {
+    static $mem = [];
+    $y = $year ?? (int) MFL_YEAR;
+    if (isset($mem[$y])) return $mem[$y];
+
+    $cacheKey = 'player-pos-map-' . $y;
+    $ttl = ($y < (int) MFL_YEAR) ? 604800 : 43200;
+    $cached = rotc_derived_cache_get($cacheKey, $ttl);
+    if (is_array($cached) && $cached) {
+        $mem[$y] = $cached;
+        return $cached;
+    }
+
+    // Prefer already-loaded detailed player DB if available, else minimal.
+    $all = rotc_all_players_map($y, true);
+    if (!$all) $all = rotc_all_players_map($y, false);
+    $map = [];
+    foreach ($all as $id => $p) {
+        if (!empty($p['position'])) $map[$id] = (string) $p['position'];
+    }
+    if ($map) rotc_derived_cache_set($cacheKey, $map);
+    $mem[$y] = $map;
+    return $map;
+}
+
+/**
+ * Resolve player records for a list of IDs from the shared full-DB index
+ * (0 network calls on warm cache), falling back to parallel chunked
+ * TYPE=players queries only for any IDs missing from the full DB.
+ */
+function rotc_resolve_players(array $ids, ?int $year = null, bool $details = true): array {
+    if (!$ids) return [];
+    $y = $year ?? (int) MFL_YEAR;
+    $all = rotc_all_players_map($y, $details);
+    $out = [];
+    $missing = [];
+    foreach ($ids as $id) {
+        $sid = (string) $id;
+        if ($sid === '') continue;
+        if (isset($all[$sid])) {
+            $out[$sid] = $all[$sid];
+        } else {
+            $missing[$sid] = true;
+        }
+    }
+    if ($missing) {
+        $chunks = array_chunk(array_keys($missing), 150);
+        $reqs = [];
+        foreach ($chunks as $chunk) {
+            $params = ['PLAYERS' => implode(',', $chunk)];
+            if ($details) $params['DETAILS'] = 1;
+            $reqs[] = ['type' => 'players', 'year' => $y, 'ttl' => 3600, 'params' => $params, 'includeLeague' => false];
+        }
+        mfl_prefetch($reqs);
+        foreach ($reqs as $req) {
+            $resp = mfl_cached_get_year('players', $y, 3600, $req['params'], false);
+            foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
+                if (!empty($p['id'])) $out[(string) $p['id']] = $p;
+            }
+        }
+    }
+    return $out;
+}
+
 function rotc_season_rank_map(): array {
     static $map = null;
     if ($map !== null) return $map;
-    $map = [];
 
-    $raw = mfl_cached_get_year('playerScores', (int) MFL_YEAR, 1800, ['W' => 'YTD', 'COUNT' => 3000]);
+    $year = (int) MFL_YEAR;
+    $cacheKey = 'season-rank-map-' . MFL_LEAGUE_ID . '-' . $year;
+    $cached = rotc_derived_cache_get($cacheKey, 1800);
+    if (is_array($cached)) {
+        $map = $cached;
+        return $map;
+    }
+
+    $map = [];
+    mfl_prefetch([
+        ['type' => 'playerScores', 'year' => $year, 'ttl' => 1800, 'params' => ['W' => 'YTD', 'COUNT' => 3000], 'includeLeague' => true],
+        ['type' => 'players', 'year' => $year, 'ttl' => 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+    ]);
+
+    $raw = mfl_cached_get_year('playerScores', $year, 1800, ['W' => 'YTD', 'COUNT' => 3000]);
     $list = mfl_normalize_list($raw['playerScores']['playerScore'] ?? null);
     $scoreById = [];
     foreach ($list as $row) {
@@ -250,11 +610,19 @@ function rotc_season_rank_map(): array {
     }
     if (!$scoreById) return $map;
 
-    $positionById = [];
-    foreach (array_chunk(array_keys($scoreById), 250) as $chunk) {
-        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk)], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-            if (!empty($p['id'])) $positionById[(string) $p['id']] = (string) ($p['position'] ?? '');
+    $positionById = rotc_player_position_map($year);
+    if (!$positionById) {
+        // Fallback if full player DB wasn't reachable.
+        $reqs = [];
+        foreach (array_chunk(array_keys($scoreById), 250) as $chunk) {
+            $reqs[] = ['type' => 'players', 'year' => $year, 'ttl' => 3600, 'params' => ['PLAYERS' => implode(',', $chunk)], 'includeLeague' => false];
+        }
+        mfl_prefetch($reqs);
+        foreach ($reqs as $req) {
+            $resp = mfl_cached_get('players', 3600, $req['params'], false);
+            foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
+                if (!empty($p['id'])) $positionById[(string) $p['id']] = (string) ($p['position'] ?? '');
+            }
         }
     }
 
@@ -272,6 +640,9 @@ function rotc_season_rank_map(): array {
             $rank++;
             $map[$id] = ['total' => $score, 'rank' => $rank, 'posCount' => $count];
         }
+    }
+    if ($map) {
+        rotc_derived_cache_set($cacheKey, $map);
     }
     return $map;
 }
@@ -291,12 +662,53 @@ function rotc_season_rank_map(): array {
  * isset() check. Cached 15 min -- add/drop activity changes it.
  */
 function rotc_free_agent_ids(): array {
+    static $ids = null;
+    if ($ids !== null) return $ids;
     $raw = mfl_cached_get('freeAgents', 900);
     $ids = [];
     foreach (mfl_normalize_list($raw['freeAgents']['leagueUnit']['player'] ?? null) as $p) {
         if (!empty($p['id'])) $ids[(string) $p['id']] = true;
     }
     return $ids;
+}
+
+/**
+ * Full-season NFL schedule indexed by week number: [week => matchup[]].
+ * Uses MFL's documented TYPE=nflSchedule&W=ALL (1 call instead of 17
+ * sequential per-week calls), cached on disk as a derived map. Falls back
+ * to parallel per-week fetches if W=ALL returns an unexpected shape.
+ */
+function rotc_nfl_schedule_all_weeks(int $year, int $ttlSeconds = 1800, int $maxWeek = 18): array {
+    static $mem = [];
+    $memKey = $year . ':' . $ttlSeconds;
+    if (isset($mem[$memKey])) return $mem[$memKey];
+
+    $raw = mfl_cached_get_year('nflSchedule', $year, $ttlSeconds, ['W' => 'ALL'], false);
+    $weeks = mfl_normalize_list($raw['fullNflSchedule']['nflSchedule'] ?? $raw['nflSchedule'] ?? null);
+    $byWeek = [];
+    foreach ($weeks as $wk) {
+        if (!is_array($wk) || !isset($wk['week'])) continue;
+        $w = (int) $wk['week'];
+        if ($w <= 0) continue;
+        $byWeek[$w] = mfl_normalize_list($wk['matchup'] ?? null);
+    }
+
+    if (!$byWeek) {
+        // Fallback: prefetch weeks 1..$maxWeek in parallel.
+        $reqs = [];
+        for ($w = 1; $w <= $maxWeek; $w++) {
+            $reqs[] = ['type' => 'nflSchedule', 'year' => $year, 'ttl' => $ttlSeconds, 'params' => ['W' => $w], 'includeLeague' => false];
+        }
+        mfl_prefetch($reqs);
+        for ($w = 1; $w <= $maxWeek; $w++) {
+            $wRaw = mfl_cached_get_year('nflSchedule', $year, $ttlSeconds, ['W' => $w], false);
+            $games = mfl_normalize_list($wRaw['nflSchedule']['matchup'] ?? null);
+            if ($games) $byWeek[$w] = $games;
+        }
+    }
+
+    $mem[$memKey] = $byWeek;
+    return $byWeek;
 }
 
 /**
@@ -404,8 +816,10 @@ function rotc_collect_pool_pick_values($node, array &$out): void {
 }
 
 function mfl_normalize_list($val): array {
-    if ($val === null) return [];
-    if (!is_array($val)) return [];
+    if (!is_array($val) || $val === []) return [];
+    if (function_exists('array_is_list')) {
+        return array_is_list($val) ? $val : [$val];
+    }
     $isAssoc = array_keys($val) !== range(0, count($val) - 1);
     return $isAssoc ? [$val] : $val;
 }
@@ -417,6 +831,8 @@ function mfl_normalize_list($val): array {
  * for team icons in tables per Matteo's call.
  */
 function mfl_franchises(): array {
+    static $out = null;
+    if ($out !== null) return $out;
     $league = mfl_cached_get('league', 86400);
     $out = [];
     foreach (mfl_normalize_list($league['league']['franchises']['franchise'] ?? null) as $f) {
@@ -436,6 +852,8 @@ function mfl_franchises(): array {
  * own standings report does (conference -> division -> franchises).
  */
 function mfl_divisions_conferences(): array {
+    static $divisions = null;
+    if ($divisions !== null) return $divisions;
     $league = mfl_cached_get('league', 86400);
     $conferences = [];
     foreach (mfl_normalize_list($league['league']['conferences']['conference'] ?? null) as $c) {
@@ -468,15 +886,32 @@ function mfl_divisions_conferences(): array {
  * $tradeByFranchisePlayer], each keyed "franchiseId|playerId".
  */
 function rotc_acquisition_maps(array $franchises): array {
+    $curYear = (int) MFL_YEAR;
+    $prevYear = $curYear - 1;
+    $cacheKey = 'acquisition-maps-' . MFL_LEAGUE_ID . '-' . $curYear;
+    $cached = rotc_derived_cache_get($cacheKey, 21600);
+    if (is_array($cached) && count($cached) === 3) {
+        return $cached;
+    }
+
+    // Prefetch all 6 endpoints concurrently instead of 6 sequential roundtrips.
+    $years = [$prevYear, $curYear];
+    $reqs = [];
+    foreach ($years as $y) {
+        $ttl = ($y < $curYear) ? 604800 : 21600;
+        $reqs[] = ['type' => 'auctionResults', 'year' => $y, 'ttl' => $ttl, 'params' => []];
+        $reqs[] = ['type' => 'draftResults',   'year' => $y, 'ttl' => $ttl, 'params' => []];
+        $reqs[] = ['type' => 'transactions',   'year' => $y, 'ttl' => $ttl, 'params' => ['TRANS_TYPE' => 'TRADE']];
+    }
+    mfl_prefetch($reqs);
+
     $auctionByFranchisePlayer = [];
     $draftByFranchisePlayer = [];
     $tradeByFranchisePlayer = [];
 
-    // Auction history -- current + prior year. Later year wins if a
-    // player somehow shows in both (shouldn't happen, but favor the
-    // more recent acquisition just in case).
-    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $auctionYear) {
-        $auctionRaw = mfl_cached_get_year('auctionResults', $auctionYear, 21600, []);
+    foreach ($years as $auctionYear) {
+        $ttl = ($auctionYear < $curYear) ? 604800 : 21600;
+        $auctionRaw = mfl_cached_get_year('auctionResults', $auctionYear, $ttl, []);
         foreach (mfl_normalize_list($auctionRaw['auctionResults']['auctionUnit']['auction'] ?? null) as $a) {
             if (empty($a['franchise']) || empty($a['player'])) continue;
             $key = $a['franchise'] . '|' . $a['player'];
@@ -485,13 +920,9 @@ function rotc_acquisition_maps(array $franchises): array {
         }
     }
 
-    // Draft history -- current + prior year. This league runs a real
-    // snake draft every year alongside the auction (confirmed live:
-    // draftType "SDRAFT" with hundreds of real picks in 2023/2024/2025),
-    // so a player who wasn't a keeper or an auction pickup is very
-    // likely here.
-    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $draftYear) {
-        $draftRaw = mfl_cached_get_year('draftResults', $draftYear, 21600, []);
+    foreach ($years as $draftYear) {
+        $ttl = ($draftYear < $curYear) ? 604800 : 21600;
+        $draftRaw = mfl_cached_get_year('draftResults', $draftYear, $ttl, []);
         foreach (mfl_normalize_list($draftRaw['draftResults']['draftUnit']['draftPick'] ?? null) as $d) {
             $pid = $d['player'] ?? '';
             if (empty($d['franchise']) || $pid === '' || $pid === '0000' || $pid === '----') continue;
@@ -500,13 +931,9 @@ function rotc_acquisition_maps(array $franchises): array {
         }
     }
 
-    // Trade history -- current + prior year. Each TRADE transaction
-    // lists player ids each side gave up (franchise1_gave_up /
-    // franchise2_gave_up); the players in franchise1's give-up list
-    // went TO franchise2, and vice versa. Confirmed live this data is
-    // structured player ids, not free text.
-    foreach ([(int) MFL_YEAR - 1, (int) MFL_YEAR] as $tradeYear) {
-        $tradeRaw = mfl_cached_get_year('transactions', $tradeYear, 21600, ['TRANS_TYPE' => 'TRADE']);
+    foreach ($years as $tradeYear) {
+        $ttl = ($tradeYear < $curYear) ? 604800 : 21600;
+        $tradeRaw = mfl_cached_get_year('transactions', $tradeYear, $ttl, ['TRANS_TYPE' => 'TRADE']);
         foreach (mfl_normalize_list($tradeRaw['transactions']['transaction'] ?? null) as $t) {
             if (($t['type'] ?? '') !== 'TRADE') continue;
             $f1 = $t['franchise'] ?? '';
@@ -524,7 +951,9 @@ function rotc_acquisition_maps(array $franchises): array {
         }
     }
 
-    return [$auctionByFranchisePlayer, $draftByFranchisePlayer, $tradeByFranchisePlayer];
+    $result = [$auctionByFranchisePlayer, $draftByFranchisePlayer, $tradeByFranchisePlayer];
+    rotc_derived_cache_set($cacheKey, $result);
+    return $result;
 }
 
 /**

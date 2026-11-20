@@ -142,13 +142,7 @@ function rotc_fetch_latest_transactions(int $count = 15): array {
             foreach (explode(',', $sides[1] ?? '') as $id) { if ($id !== '') $allIds[] = $id; }
         }
     }
-    $players = [];
-    if ($allIds) {
-        foreach (array_chunk(array_unique($allIds), 150) as $chunk) {
-            $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-            foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) { $players[$p['id']] = $p; }
-        }
-    }
+    $players = $allIds ? rotc_resolve_players(array_unique($allIds), null, true) : [];
 
     foreach ($rows as &$t) {
         $t['badge'] = rotc_txn_type_badge($t);

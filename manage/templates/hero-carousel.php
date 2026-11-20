@@ -32,7 +32,11 @@ $slides = $slides ?? [
   <div class="rotc-pc-track">
     <?php foreach ($slides as $i => $s): ?>
       <div class="rotc-pc-slide<?= $i === 0 ? ' active' : '' ?>" data-slide="<?= $i ?>">
-        <div class="rotc-pc-img" style="background-image:url('<?= htmlspecialchars($s['image']) ?>');"></div>
+        <?php if ($i === 0): ?>
+          <div class="rotc-pc-img" style="background-image:url('<?= htmlspecialchars($s['image']) ?>');"></div>
+        <?php else: ?>
+          <div class="rotc-pc-img" data-bg="<?= htmlspecialchars($s['image']) ?>"></div>
+        <?php endif; ?>
         <div class="rotc-pc-body">
           <div class="rotc-pc-meta"><?= htmlspecialchars($s['date']) ?></div>
           <h1><a href="<?= htmlspecialchars($s['url']) ?>"><?= htmlspecialchars($s['headline']) ?></a></h1>
@@ -52,21 +56,35 @@ $slides = $slides ?? [
 
 <script>
 // Minimal slide/dot/arrow wiring — no dependencies, matches the
-// active-class pattern the CSS expects.
+// active-class pattern the CSS expects. Lazily hydrates off-screen
+// slide backgrounds so slides 2..N don't compete with LCP slide 0.
 (function(){
   const root = document.getElementById('rotc-postcarousel');
   if (!root) return;
   const slides = root.querySelectorAll('.rotc-pc-slide');
   const dots = root.querySelectorAll('.rotc-pc-dot');
   let i = 0;
+  function loadBg(slide){
+    if (!slide) return;
+    const img = slide.querySelector('.rotc-pc-img[data-bg]');
+    if (img) {
+      img.style.backgroundImage = "url('" + img.getAttribute('data-bg').replace(/'/g, "\\'") + "')";
+      img.removeAttribute('data-bg');
+    }
+  }
   function show(n){
     i = (n + slides.length) % slides.length;
+    loadBg(slides[i]);
+    loadBg(slides[(i + 1) % slides.length]);
     slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
     dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
   }
   root.querySelector('.rotc-pc-prev').addEventListener('click', () => show(i - 1));
   root.querySelector('.rotc-pc-next').addEventListener('click', () => show(i + 1));
   dots.forEach((d, idx) => d.addEventListener('click', () => show(idx)));
+  if (slides.length > 1) {
+    window.addEventListener('load', () => loadBg(slides[1]), { once: true });
+  }
   setInterval(() => show(i + 1), 7000);
 })();
 </script>

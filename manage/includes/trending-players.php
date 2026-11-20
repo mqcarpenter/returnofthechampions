@@ -19,13 +19,7 @@ function rotc_fetch_trending(string $type, int $count = 15): array {
     $list = mfl_normalize_list($raw[$type]['player'] ?? null);
     $ids = array_column($list, 'id');
 
-    $players = [];
-    if ($ids) {
-        $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $ids), 'DETAILS' => 1], false);
-        foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-            $players[$p['id']] = $p;
-        }
-    }
+    $players = $ids ? rotc_resolve_players($ids, null, true) : [];
 
     $rows = [];
     foreach ($list as $row) {

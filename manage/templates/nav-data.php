@@ -33,25 +33,32 @@ if (file_exists($rotc_configPath)) {
     require_once __DIR__ . '/../includes/mfl-api.php';
     require_once __DIR__ . '/../includes/mfl-auth.php';
     require_once __DIR__ . '/../includes/helmets.php';
-    rotc_session_start();
+    // Only open a PHP session when the visitor already has a session cookie
+    // (or a caller like login.php/rotc_require_login() already opened one).
+    // Skipping session_start() for anonymous visitors avoids disk I/O,
+    // session lock contention, and no-cache headers on public/WP pages.
+    $rotc_hadSession = (session_status() === PHP_SESSION_ACTIVE);
+    $rotc_hasSession = rotc_session_start_if_exists();
     if (!isset($is_logged_in)) {
-        $is_logged_in = rotc_mfl_logged_in();
+        $is_logged_in = $rotc_hasSession && rotc_mfl_logged_in();
     }
     if ($is_logged_in) {
         $rotc_ownerUsername = rotc_mfl_username();
-        // Franchise id is normally already cached in session by
-        // rotc_require_login() on action pages, but header.php renders on
-        // every page (including ones that never call that), so resolve it
-        // here too if it isn't set yet -- needed to look up the owner's
-        // team helmet for the nav pill.
         $rotc_ownerFranchiseId = rotc_mfl_franchise_id() ?? rotc_mfl_resolve_franchise_id();
         if ($rotc_ownerFranchiseId) {
-            // Use the site's own custom helmet art (includes/helmets.php),
-            // not MFL's raw franchise 'icon' field -- that's just whatever
-            // small image each owner happened to upload on MFL itself, not
-            // necessarily a helmet, and not guaranteed to even be set.
             $rotc_ownerHelmetUrl = rotc_helmet_src($rotc_ownerFranchiseId);
         }
+        // Ensure CSRF token is persisted before releasing the session lock
+        // so downstream GET forms can read $_SESSION['rotc_csrf'] lock-free.
+        if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['rotc_csrf'])) {
+            $_SESSION['rotc_csrf'] = bin2hex(random_bytes(32));
+        }
+    }
+    // Release the exclusive PHP session file lock on GET requests before
+    // downstream MFL/WP fetches run, so concurrent AJAX calls (ticker,
+    // live-wire, other tabs) never queue behind a slow page load.
+    if (session_status() === PHP_SESSION_ACTIVE && !$rotc_hadSession && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        session_write_close();
     }
 }
 $is_logged_in = $is_logged_in ?? false;

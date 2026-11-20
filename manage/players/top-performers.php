@@ -54,6 +54,23 @@ if (!$fetchError) {
     $yearParam = (int) ($_GET['year'] ?? MFL_YEAR);
     if ($yearParam < (int) MFL_YEAR - 2 || $yearParam > (int) MFL_YEAR) $yearParam = (int) MFL_YEAR;
 
+    $curYear = (int) MFL_YEAR;
+    $prefetch = [
+        ['type' => 'league',       'year' => $curYear,   'ttl' => 86400, 'params' => []],
+        ['type' => 'rosters',      'year' => $curYear,   'ttl' => 1800,  'params' => []],
+        ['type' => 'playerScores', 'year' => $yearParam, 'ttl' => 1800,  'params' => ['W' => $weekParam, 'COUNT' => ($faOnly || $teamParam) ? 3000 : 200]],
+        ['type' => 'players',      'year' => $curYear,   'ttl' => 43200, 'params' => ['DETAILS' => 1], 'includeLeague' => false],
+        ['type' => 'nflByeWeeks',  'year' => $curYear,   'ttl' => 86400, 'params' => [], 'includeLeague' => false],
+        ['type' => 'injuries',     'year' => $curYear,   'ttl' => 1800,  'params' => [], 'includeLeague' => false],
+    ];
+    if ($faOnly) {
+        $prefetch[] = ['type' => 'freeAgents', 'year' => $curYear, 'ttl' => 900, 'params' => []];
+    }
+    if ($weekParam !== 'YTD') {
+        $prefetch[] = ['type' => 'nflSchedule', 'year' => $yearParam, 'ttl' => 21600, 'params' => ['W' => (int) $weekParam], 'includeLeague' => false];
+    }
+    mfl_prefetch($prefetch);
+
     $franchises = mfl_franchises();
     $ownerByPlayerId = [];
     $rostersRaw = mfl_cached_get('rosters', 1800, []);
@@ -74,18 +91,7 @@ if (!$fetchError) {
 
     $faIds = $faOnly ? rotc_free_agent_ids() : null;
 
-    $players = [];
-    if ($ids) {
-        foreach (array_chunk($ids, 250) as $chunk) {
-            // DETAILS=1 is what surfaces espn_id, needed for the Stat
-            // Line column below (exact-id match against ESPN's box
-            // score, same as the Live Wire board).
-            $resp = mfl_cached_get('players', 3600, ['PLAYERS' => implode(',', $chunk), 'DETAILS' => 1], false);
-            foreach (mfl_normalize_list($resp['players']['player'] ?? null) as $p) {
-                $players[$p['id']] = $p;
-            }
-        }
-    }
+    $players = $ids ? rotc_resolve_players($ids, null, true) : [];
     foreach ($list as $row) {
         $p = $players[$row['id']] ?? null;
         if (!$p) continue;

@@ -113,7 +113,9 @@ function rotc_auction_fetch_xml(int $ttl = 30, bool $force = false): ?string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT        => 5,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => defined('MFL_USER_AGENT') ? MFL_USER_AGENT : 'ROTC26-Site',
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS      => 2,
@@ -121,8 +123,9 @@ function rotc_auction_fetch_xml(int $ttl = 30, bool $force = false): ?string {
     $body = curl_exec($ch);
     $ok = $body !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200
           && strpos((string) $body, '<auctionResults') !== false;
+    curl_close($ch);
 
-    if ($ok) { @file_put_contents($cacheFile, $body); return $body; }
+    if ($ok) { @file_put_contents($cacheFile, $body, LOCK_EX); return $body; }
     // MFL hiccuped -- a stale copy beats an empty page.
     if (file_exists($cacheFile)) {
         $stale = file_get_contents($cacheFile);

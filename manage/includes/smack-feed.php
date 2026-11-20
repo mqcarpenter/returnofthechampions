@@ -27,7 +27,9 @@ function rotc_smack_cached_get(string $url, int $ttlSeconds): ?string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT        => 5,
+        CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => 'ROTC-SmackFeed/1.0',
     ]);
     $body = curl_exec($ch);
@@ -35,7 +37,7 @@ function rotc_smack_cached_get(string $url, int $ttlSeconds): ?string {
     curl_close($ch);
 
     if ($ok) {
-        @file_put_contents($cacheFile, $body);
+        @file_put_contents($cacheFile, $body, LOCK_EX);
         return $body;
     }
 
@@ -45,6 +47,17 @@ function rotc_smack_cached_get(string $url, int $ttlSeconds): ?string {
 function rotc_fetch_smack_items(int $count = 6): array {
     $forumBase = getenv('ROTC_FORUM_BASE') ?: 'https://www.returnofthechampions.com/community/';
     $url = rtrim($forumBase, '/') . '/?type=rss2&forum=g&topic=g';
+
+    $cacheDir = sys_get_temp_dir() . '/rotc-wp-cache';
+    if (!is_dir($cacheDir)) @mkdir($cacheDir, 0700, true);
+    $parsedFile = $cacheDir . '/smack-parsed-' . md5($url . '|' . $count) . '.ser';
+    if (is_file($parsedFile) && (time() - filemtime($parsedFile)) < 300) {
+        $raw = @file_get_contents($parsedFile);
+        if ($raw !== false && $raw !== '') {
+            $cached = @unserialize($raw, ['allowed_classes' => false]);
+            if (is_array($cached)) return $cached;
+        }
+    }
 
     $body = rotc_smack_cached_get($url, 300);
     if ($body === null) return [];
@@ -80,5 +93,6 @@ function rotc_fetch_smack_items(int $count = 6): array {
         ];
     }
 
+    if ($items) @file_put_contents($parsedFile, serialize($items), LOCK_EX);
     return $items;
 }
