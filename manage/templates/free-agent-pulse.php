@@ -23,6 +23,10 @@
 $top_free_agents = $top_free_agents ?? [];
 $instagram_posts = $instagram_posts ?? [];
 $ig_handle = function_exists('rotc_instagram_handle') ? rotc_instagram_handle() : 'returnofthechampions';
+if (isset($_GET['ig_debug']) && function_exists('rotc_instagram_debug_info')) {
+    // /?ig_debug=1 -> HTML comment with cache age + last error (never the token). View source to read it.
+    echo '<!-- ig-debug ' . htmlspecialchars(json_encode(rotc_instagram_debug_info(7)), ENT_NOQUOTES) . ' posts=' . count($instagram_posts) . ' -->' . "\n";
+}
 $ig_profile = 'https://www.instagram.com/' . rawurlencode($ig_handle) . '/';
 
 /** One free-agent row: logo, hoverable name, position, Week 1 projected points. */

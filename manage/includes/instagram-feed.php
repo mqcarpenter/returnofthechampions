@@ -24,17 +24,17 @@
  * refresh only runs for Instagram-login tokens.
  *
  * Same server-to-server + file-cache pattern as includes/smack-feed.php:
- * the feed is cached for an hour, a failed fetch serves the last good copy
- * (up to 3 days, after which Instagram's signed image URLs have expired
- * anyway), and with no token or no data the tab shows a "Follow us" card
+ * the feed is cached for 20 minutes, a failed fetch serves the last good copy
+ * (up to 1 day; Instagram's signed image URLs expire soon after that), and with no token or no data the tab shows a "Follow us" card
  * instead. Nothing here can take the front page down.
  */
 
 const ROTC_IG_DEFAULT_HANDLE = 'returnofthechampions';
 const ROTC_IG_API = 'https://graph.instagram.com';
 const ROTC_FB_API = 'https://graph.facebook.com';
-const ROTC_IG_FEED_TTL = 3600;            // 1 hour
-const ROTC_IG_STALE_MAX = 3 * 86400;      // serve a stale copy for up to 3 days
+const ROTC_IG_FEED_TTL = 1200;            // 20 minutes
+const ROTC_IG_STALE_MAX = 86400;          // on API errors, serve a stale copy for at most 1 day
+const ROTC_IG_RETRY_AFTER_FAIL = 120;     // after a failed fetch, don't re-hit the API for 2 minutes
 const ROTC_IG_REFRESH_EVERY = 7 * 86400;  // refresh the token weekly (it lasts 60 days)
 
 function rotc_instagram_handle(): string {
@@ -57,6 +57,33 @@ function rotc_instagram_state_file(): string {
     return $dir . '/rotc-instagram-token.json';
 }
 
+/** Last API/transport error this request (message only, never the URL or token). */
+function rotc_instagram_set_error(string $msg): void {
+    $GLOBALS['rotc_ig_last_error'] = $msg;
+}
+
+function rotc_instagram_cache_dir(): string {
+    $dir = sys_get_temp_dir() . '/rotc-wp-cache';
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    return $dir;
+}
+
+function rotc_instagram_status_file(): string {
+    return rotc_instagram_cache_dir() . '/instagram-status.json';
+}
+
+/** Small status record (times + last error text, no token) for debugging a stuck feed. */
+function rotc_instagram_status_read(): array {
+    $f = rotc_instagram_status_file();
+    $d = file_exists($f) ? json_decode((string) @file_get_contents($f), true) : null;
+    return is_array($d) ? $d : [];
+}
+
+function rotc_instagram_status_write(array $patch): void {
+    $d = array_merge(rotc_instagram_status_read(), $patch);
+    @file_put_contents(rotc_instagram_status_file(), json_encode($d), LOCK_EX);
+}
+
 function rotc_instagram_http_get(string $url): ?array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -68,13 +95,18 @@ function rotc_instagram_http_get(string $url): ?array {
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
     curl_close($ch);
     if ($body === false || $code !== 200) {
         if ($body !== false) {
             $err = json_decode($body, true);
             // Log the API's message only, never the URL (it carries the token).
-            error_log('instagram feed: HTTP ' . $code . ' ' . ($err['error']['message'] ?? ''));
+            $msg = 'HTTP ' . $code . ' ' . ($err['error']['message'] ?? '') . (isset($err['error']['code']) ? ' (code ' . $err['error']['code'] . ')' : '');
+        } else {
+            $msg = 'curl failed: ' . $curlErr;
         }
+        error_log('instagram feed: ' . $msg);
+        rotc_instagram_set_error($msg);
         return null;
     }
     $data = json_decode($body, true);
@@ -160,8 +192,7 @@ function rotc_instagram_fb_account_id(string $token): ?string {
  */
 function rotc_fetch_instagram_posts(int $count = 9): array {
     try {
-        $cacheDir = sys_get_temp_dir() . '/rotc-wp-cache';
-        if (!is_dir($cacheDir)) @mkdir($cacheDir, 0700, true);
+        $cacheDir = rotc_instagram_cache_dir();
         $cacheFile = $cacheDir . '/instagram-' . md5(rotc_instagram_handle() . '|' . $count) . '.json';
         $age = file_exists($cacheFile) ? time() - filemtime($cacheFile) : PHP_INT_MAX;
 
@@ -170,9 +201,17 @@ function rotc_fetch_instagram_posts(int $count = 9): array {
             if (is_array($cached)) return $cached;
         }
 
-        $token = rotc_instagram_token();
+        // A recent fetch just failed: serve the stale copy instead of hammering the API (5s timeouts) on every page view.
+        $st = rotc_instagram_status_read();
+        $recentFail = !empty($st['last_fail_at']) && time() - (int) $st['last_fail_at'] < ROTC_IG_RETRY_AFTER_FAIL;
+
+        $token = $recentFail ? null : rotc_instagram_token();
         $posts = null;
-        if ($token !== null) {
+        if ($recentFail) {
+            // fall through to the stale-copy branch below
+        } elseif ($token === null) {
+            rotc_instagram_status_write(['last_fail_at' => time(), 'last_error' => 'no ROTC_INSTAGRAM_TOKEN configured']);
+        } else {
             $fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
             $q = '/media?fields=' . $fields . '&limit=' . (int) $count . '&access_token=' . rawurlencode($token);
             $data = null;
@@ -200,6 +239,9 @@ function rotc_fetch_instagram_posts(int $count = 9): array {
                     if (count($posts) >= $count) break;
                 }
                 @file_put_contents($cacheFile, json_encode($posts), LOCK_EX);
+                rotc_instagram_status_write(['last_ok_at' => time(), 'last_fail_at' => 0, 'last_error' => '', 'last_count' => count($posts)]);
+            } else {
+                rotc_instagram_status_write(['last_fail_at' => time(), 'last_error' => $GLOBALS['rotc_ig_last_error'] ?? 'no data returned']);
             }
         }
 
@@ -212,4 +254,20 @@ function rotc_fetch_instagram_posts(int $count = 9): array {
         error_log('instagram feed: ' . $e->getMessage());
         return [];
     }
+}
+
+/** Debug snapshot (no token): cache age, last success/failure, last error text. */
+function rotc_instagram_debug_info(int $count = 7): array {
+    $cacheFile = rotc_instagram_cache_dir() . '/instagram-' . md5(rotc_instagram_handle() . '|' . $count) . '.json';
+    $st = rotc_instagram_status_read();
+    return [
+        'cache_dir'        => rotc_instagram_cache_dir(),
+        'cache_age_sec'    => file_exists($cacheFile) ? time() - filemtime($cacheFile) : null,
+        'ttl_sec'          => ROTC_IG_FEED_TTL,
+        'stale_max_sec'    => ROTC_IG_STALE_MAX,
+        'last_ok_ago_sec'  => !empty($st['last_ok_at']) ? time() - (int) $st['last_ok_at'] : null,
+        'last_fail_ago_sec'=> !empty($st['last_fail_at']) ? time() - (int) $st['last_fail_at'] : null,
+        'last_error'       => (string) ($st['last_error'] ?? ''),
+        'token_configured' => (getenv('ROTC_INSTAGRAM_TOKEN') ?: (defined('ROTC_INSTAGRAM_TOKEN') ? ROTC_INSTAGRAM_TOKEN : '')) !== '',
+    ];
 }
