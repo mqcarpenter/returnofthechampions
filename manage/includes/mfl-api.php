@@ -194,7 +194,7 @@ function mfl_cached_get_year(string $type, int $year, int $ttlSeconds, array $pa
  *   ['type' => string, 'ttl' => int, 'year' => ?int, 'params' => array,
  *    'includeLeague' => bool, 'isValid' => ?callable]
  */
-function mfl_prefetch(array $requests, int $maxConcurrency = 8): void {
+function mfl_prefetch(array $requests, int $maxConcurrency = 4): void {
     if (!$requests) return;
     $mem = &mfl_request_cache();
     $dir = mfl_cache_dir();

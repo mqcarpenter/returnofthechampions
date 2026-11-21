@@ -42,23 +42,29 @@ RewriteRule ^([a-z0-9-]+)/([a-z0-9-]+)/?$ $1/$2.php [L,QSA]
   AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml text/javascript application/javascript application/json application/xml image/svg+xml
 </IfModule>
 
-# Long-lived browser caching for static assets (CSS already uses ?v=filemtime
-# cache busting in header.php and rotc-theme/functions.php).
+# Browser caching for static assets. CSS uses ?v=filemtime cache busting
+# (header.php, rotc-theme/functions.php), so it can be cached for a year.
+# Images and JS are NOT versioned in their URLs, so keep them to 1 week --
+# otherwise a replaced helmet/icon under the same filename stays stale in
+# visitors' browsers for up to a year.
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType text/css "access plus 1 year"
-  ExpiresByType application/javascript "access plus 1 year"
-  ExpiresByType text/javascript "access plus 1 year"
-  ExpiresByType image/png "access plus 1 year"
-  ExpiresByType image/jpeg "access plus 1 year"
-  ExpiresByType image/webp "access plus 1 year"
-  ExpiresByType image/svg+xml "access plus 1 year"
-  ExpiresByType image/x-icon "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 week"
+  ExpiresByType text/javascript "access plus 1 week"
+  ExpiresByType image/png "access plus 1 week"
+  ExpiresByType image/jpeg "access plus 1 week"
+  ExpiresByType image/webp "access plus 1 week"
+  ExpiresByType image/svg+xml "access plus 1 week"
+  ExpiresByType image/x-icon "access plus 1 week"
 </IfModule>
 <IfModule mod_headers.c>
-  <FilesMatch "\.(css|js|png|jpe?g|webp|svg|ico|woff2)$">
+  <FilesMatch "\.(css|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.(js|png|jpe?g|webp|svg|ico)$">
+    Header set Cache-Control "public, max-age=604800"
   </FilesMatch>
 </IfModule>
 
