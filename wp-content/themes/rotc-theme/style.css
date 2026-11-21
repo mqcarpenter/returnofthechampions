@@ -186,6 +186,12 @@ h1,h2,h3,h4{ font-family:"Roboto Condensed","Arial Narrow",sans-serif; line-heig
 .rotc-article-share{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 18px; font-family:"Roboto Condensed",sans-serif; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
 .rotc-article-share a, .rotc-copy-link{ border:1px solid var(--line); border-radius:999px; padding:5px 12px; color:var(--ink-2); background:none; cursor:pointer; font:inherit; }
 .rotc-article-share a:hover, .rotc-copy-link:hover{ border-color:var(--accent); color:var(--accent); }
+.rotc-article-share{ margin:22px 0 18px; }
+.rotc-share-label{ color:var(--muted); font-weight:700; }
+.rotc-article-share .rotc-share-btn{ display:inline-flex; align-items:center; gap:6px; min-width:38px; min-height:38px; justify-content:center; padding:6px 10px; text-decoration:none; }
+.rotc-article-share .rotc-share-btn[hidden]{ display:none; }
+.rotc-article-share .rotc-share-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.rotc-copy-link.is-copied{ border-color:var(--accent); color:var(--accent); }
 
 /* [rotc_stat] shortcode -- the one number a recap wants to land, given
    real visual weight instead of sitting as plain paragraph text. */

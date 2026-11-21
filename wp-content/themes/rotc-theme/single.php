@@ -53,16 +53,10 @@ get_header();
           </header>
         <?php endif; ?>
 
-        <div class="rotc-article-share">
-          <?php $permalink = esc_url(get_permalink()); $titleEnc = rawurlencode(get_the_title()); ?>
-          <a href="https://twitter.com/intent/tweet?url=<?php echo urlencode($permalink); ?>&text=<?php echo $titleEnc; ?>" target="_blank" rel="noopener">Share on X</a>
-          <a href="https://www.facebook.com/sharer/sharer.php?u=<?php echo urlencode($permalink); ?>" target="_blank" rel="noopener">Share on Facebook</a>
-          <button type="button" class="rotc-copy-link" data-url="<?php echo $permalink; ?>">Copy Link</button>
-        </div>
-
         <div class="rotc-article-body">
           <?php the_content(); ?>
         </div>
+        <?php rotc_theme_share_buttons(); ?>
         <?php
         $tags = get_the_tags();
         if ($tags):
@@ -119,22 +113,4 @@ get_header();
     </div>
   </aside>
 </div>
-<script>
-(function(){
-  var btn = document.querySelector('.rotc-copy-link');
-  if (!btn) return;
-  btn.addEventListener('click', function(){
-    var url = btn.getAttribute('data-url');
-    var done = function(){ var t = btn.textContent; btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = t; }, 1500); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(done);
-    } else {
-      var ta = document.createElement('textarea');
-      ta.value = url; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); done(); } catch (e) {}
-      document.body.removeChild(ta);
-    }
-  });
-})();
-</script>
 <?php get_footer(); ?>
