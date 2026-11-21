@@ -5,8 +5,8 @@
  * widget (templates/free-agent-pulse.php). Deliberately two DIFFERENT
  * measures so the tabs aren't redundant:
  *
- * - Top Free Agents: ranked by TYPE=projectedScores (Week 1), same
- *   measure players/free-agents.php's "Wk 1 Proj" column already uses --
+ * - Top Free Agents: ranked by TYPE=projectedScores (current NFL week), same
+ *   measure players/free-agents.php's "Wk N Proj" column already uses --
  *   this is a "how good is this specific player expected to be right
  *   now" question, best answered by a projection, not a rank taken from
  *   THIS league's own free agent pool.
@@ -39,9 +39,9 @@ function rotc_fetch_players_by_id(array $ids): array {
 
 /**
  * Top $count available (not on any franchise's roster) free agents,
- * ranked by Week 1 projected fantasy points (best -- highest projection
+ * ranked by current-week projected fantasy points (best -- highest projection
  * -- first). Same TYPE=projectedScores source as free-agents.php's own
- * "Wk 1 Proj" column.
+ * "Wk N Proj" column.
  * @return array each row: ['name','pd','position','team','proj'].
  */
 function rotc_fetch_top_free_agents(int $count = 20): array {
@@ -49,7 +49,7 @@ function rotc_fetch_top_free_agents(int $count = 20): array {
     $availableIds = array_column(mfl_normalize_list($faRaw['freeAgents']['leagueUnit']['player'] ?? null), 'id');
     if (!$availableIds) return [];
 
-    $projRaw = mfl_cached_get('projectedScores', 3600, ['W' => 1, 'COUNT' => 3000]);
+    $projRaw = mfl_cached_get('projectedScores', 3600, ['W' => rotc_current_nfl_week(), 'COUNT' => 3000]);
     $projById = [];
     foreach (mfl_normalize_list($projRaw['projectedScores']['playerScore'] ?? null) as $row) {
         if (!empty($row['id']) && $row['score'] !== '') $projById[$row['id']] = (float) $row['score'];

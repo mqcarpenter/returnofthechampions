@@ -22,6 +22,7 @@
  */
 $top_free_agents = $top_free_agents ?? [];
 $instagram_posts = $instagram_posts ?? [];
+$fa_week = function_exists('rotc_current_nfl_week') ? rotc_current_nfl_week() : 1;
 $ig_handle = function_exists('rotc_instagram_handle') ? rotc_instagram_handle() : 'returnofthechampions';
 if (isset($_GET['ig_debug']) && function_exists('rotc_instagram_debug_info')) {
     // /?ig_debug=1 -> HTML comment with cache age + last error (never the token). View source to read it.
@@ -29,12 +30,12 @@ if (isset($_GET['ig_debug']) && function_exists('rotc_instagram_debug_info')) {
 }
 $ig_profile = 'https://www.instagram.com/' . rawurlencode($ig_handle) . '/';
 
-/** One free-agent row: logo, hoverable name, position, Week 1 projected points. */
+/** One free-agent row: logo, hoverable name, position, current-week projected points. */
 function rotc_fa_pulse_row(array $r): void {
 ?>
   <div class="rotc-trending-row">
     <?= rotc_team_logo_img($r['team'], 18) ?>
-    <span class="rotc-trending-name"><?= rotc_player_hover_span($r['name'], $r['pd'], ['Wk 1 Proj' => number_format($r['proj'], 1) . ' pts']) ?></span>
+    <span class="rotc-trending-name"><?= rotc_player_hover_span($r['name'], $r['pd'], ['Wk ' . $fa_week . ' Proj' => number_format($r['proj'], 1) . ' pts']) ?></span>
     <span class="rotc-trending-pos"><?= htmlspecialchars($r['position']) ?></span>
     <span class="rotc-trending-pct"><?= number_format($r['proj'], 1) ?></span>
   </div>
@@ -96,7 +97,7 @@ function rotc_fa_pulse_row(array $r): void {
 
   <div class="rotc-sidefeed-panel" data-panel="topfa">
     <div class="rotc-trending-group">
-      <div class="rotc-trending-heading">Top 20 Available &mdash; Week 1 Projection</div>
+      <div class="rotc-trending-heading">Top 20 Available &mdash; Week <?= (int) $fa_week ?> Projection</div>
       <?php if (!$top_free_agents): ?>
         <div class="rotc-sidefeed-item"><div class="desc">No free agent data available.</div></div>
       <?php else: foreach ($top_free_agents as $r) rotc_fa_pulse_row($r); endif; ?>

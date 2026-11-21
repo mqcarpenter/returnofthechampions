@@ -7,8 +7,8 @@
  * against:
  *   - TYPE=players               name / position / NFL team / status
  *   - TYPE=nflByeWeeks           bye week per NFL team
- *   - TYPE=nflSchedule (W=1)     week 1 opponent per NFL team
- *   - TYPE=projectedScores (W=1) week 1 projected fantasy points
+ *   - TYPE=nflSchedule (W=cur)   current-week opponent per NFL team
+ *   - TYPE=projectedScores (W=cur) current-week projected fantasy points
  *   - TYPE=playerScores (2025 season, W=YTD) prior-year total points
  *
  * Sorting happens across the FULL filtered result set, then the sorted
@@ -47,8 +47,8 @@ $SORTABLE = [
     'team'     => ['label' => 'NFL Team', 'type' => 'text'],
     'status'   => ['label' => 'Status',   'type' => 'text'],
     'bye'      => ['label' => 'Bye',      'type' => 'num'],
-    'opp'      => ['label' => 'Wk 1 Opp', 'type' => 'text'],
-    'proj'     => ['label' => 'Wk 1 Proj','type' => 'num'],
+    'opp'      => ['label' => 'Opp',      'type' => 'text'],
+    'proj'     => ['label' => 'Proj',     'type' => 'num'],
     'pts2025'  => ['label' => '2025 Pts', 'type' => 'num'],
 ];
 $sort = $_GET['sort'] ?? '';
@@ -62,12 +62,15 @@ if (!$fetchError) {
 
     $params = $posFilter ? ['POSITION' => $posFilter] : [];
     $curYear = (int) MFL_YEAR;
+    $faWeek  = rotc_current_nfl_week();
+    $SORTABLE['opp']['label']  = 'Wk ' . $faWeek . ' Opp';
+    $SORTABLE['proj']['label'] = 'Wk ' . $faWeek . ' Proj';
     mfl_prefetch([
         ['type' => 'freeAgents',      'year' => $curYear,     'ttl' => 900,    'params' => $params],
         ['type' => 'players',         'year' => $curYear,     'ttl' => 43200,  'params' => ['DETAILS' => 1], 'includeLeague' => false],
         ['type' => 'nflByeWeeks',     'year' => $curYear,     'ttl' => 86400,  'params' => [], 'includeLeague' => false],
-        ['type' => 'nflSchedule',     'year' => $curYear,     'ttl' => 86400,  'params' => ['W' => 1], 'includeLeague' => false],
-        ['type' => 'projectedScores', 'year' => $curYear,     'ttl' => 3600,   'params' => ['W' => 1, 'COUNT' => 3000]],
+        ['type' => 'nflSchedule',     'year' => $curYear,     'ttl' => 86400,  'params' => ['W' => $faWeek], 'includeLeague' => false],
+        ['type' => 'projectedScores', 'year' => $curYear,     'ttl' => 3600,   'params' => ['W' => $faWeek, 'COUNT' => 3000]],
         ['type' => 'playerScores',    'year' => $curYear - 1, 'ttl' => 604800, 'params' => ['W' => 'YTD', 'COUNT' => 3000]],
         ['type' => 'playerScores',    'year' => $curYear,     'ttl' => 1800,   'params' => ['W' => 'YTD', 'COUNT' => 3000]],
         ['type' => 'rosters',         'year' => $curYear,     'ttl' => 1800,   'params' => []],
@@ -84,8 +87,8 @@ if (!$fetchError) {
     // Bye weeks -- team abbrev -> bye week number.
     $byeByTeam = rotc_bye_week_map();
 
-    // Week 1 opponent -- team abbrev -> opponent abbrev.
-    $schedRaw = mfl_cached_get('nflSchedule', 86400, ['W' => 1], false);
+    // Current-week opponent -- team abbrev -> opponent abbrev.
+    $schedRaw = mfl_cached_get('nflSchedule', 86400, ['W' => $faWeek], false);
     $oppByTeam = [];
     foreach (mfl_normalize_list($schedRaw['nflSchedule']['matchup'] ?? null) as $m) {
         $teams = mfl_normalize_list($m['team'] ?? null);
@@ -95,8 +98,8 @@ if (!$fetchError) {
         }
     }
 
-    // Week 1 projected points -- player id -> score.
-    $projRaw = mfl_cached_get('projectedScores', 3600, ['W' => 1, 'COUNT' => 3000]);
+    // Current-week projected points -- player id -> score.
+    $projRaw = mfl_cached_get('projectedScores', 3600, ['W' => $faWeek, 'COUNT' => 3000]);
     $projById = [];
     foreach (mfl_normalize_list($projRaw['projectedScores']['playerScore'] ?? null) as $row) {
         if (!empty($row['id'])) $projById[$row['id']] = $row['score'] ?? '';
@@ -197,7 +200,7 @@ function rotc_sort_link(string $col, string $label, string $sort, string $dir): 
             <?php foreach ($rows as $i => $r): ?>
               <tr class="<?= $i % 2 === 0 ? 'odd' : 'even' ?>">
                 <td><?= rotc_team_logo_img($r['team']) ?></td>
-                <td><?= rotc_player_hover_span($r['name'], $r['pd'], ['2025 Total' => $r['pts2025'] !== '' ? $r['pts2025'] . ' pts' : '', 'Wk 1 Proj' => $r['proj'] !== '' ? $r['proj'] . ' pts' : '', 'Bye Week' => $r['bye'], 'Wk 1 Opp' => $r['opp']]) ?></td>
+                <td><?= rotc_player_hover_span($r['name'], $r['pd'], ['2025 Total' => $r['pts2025'] !== '' ? $r['pts2025'] . ' pts' : '', 'Wk ' . $faWeek . ' Proj' => $r['proj'] !== '' ? $r['proj'] . ' pts' : '', 'Bye Week' => $r['bye'], 'Wk ' . $faWeek . ' Opp' => $r['opp']]) ?></td>
                 <td><?= htmlspecialchars($r['position']) ?></td>
                 <td><?= htmlspecialchars($r['team']) ?></td>
                 <td><?= htmlspecialchars($r['status']) ?></td>

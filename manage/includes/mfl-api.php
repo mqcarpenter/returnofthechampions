@@ -661,6 +661,21 @@ function rotc_season_rank_map(): array {
  * player-value page can filter its list to "free agents only" with an
  * isset() check. Cached 15 min -- add/drop activity changes it.
  */
+/**
+ * Current NFL week per MFL (TYPE=nflSchedule with no W returns the current
+ * week's schedule and its week number; it rolls over once a week's games
+ * finish). Clamped to 1..18; falls back to 1 (preseason/offseason or an
+ * MFL failure). Used for "this week" projections and opponents.
+ */
+function rotc_current_nfl_week(): int {
+    static $week = null;
+    if ($week !== null) return $week;
+    $raw = mfl_cached_get('nflSchedule', 1800, [], false);
+    $w = (int) ($raw['nflSchedule']['week'] ?? 0);
+    $week = ($w >= 1 && $w <= 18) ? $w : 1;
+    return $week;
+}
+
 function rotc_free_agent_ids(): array {
     static $ids = null;
     if ($ids !== null) return $ids;

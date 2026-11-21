@@ -55,7 +55,7 @@ if ($hasConfig) {
         ['type' => 'topDrops',        'year' => $curYear, 'ttl' => 1800,  'params' => ['COUNT' => 15], 'includeLeague' => false],
         ['type' => 'transactions',    'year' => $curYear, 'ttl' => 900,   'params' => ['TRANS_TYPE' => 'DEFAULT', 'COUNT' => 100]],
         ['type' => 'freeAgents',      'year' => $curYear, 'ttl' => 900,   'params' => []],
-        ['type' => 'projectedScores', 'year' => $curYear, 'ttl' => 3600,  'params' => ['W' => 1, 'COUNT' => 3000]],
+        ['type' => 'projectedScores', 'year' => $curYear, 'ttl' => 3600,  'params' => ['W' => rotc_current_nfl_week(), 'COUNT' => 3000]],
         ['type' => 'rosters',         'year' => $curYear, 'ttl' => 1800,  'params' => []],
         ['type' => 'injuries',        'year' => $curYear, 'ttl' => 1800,  'params' => [], 'includeLeague' => false],
         ['type' => 'nflByeWeeks',     'year' => $curYear, 'ttl' => 86400, 'params' => [], 'includeLeague' => false],
